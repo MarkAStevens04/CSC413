@@ -29,6 +29,24 @@ class AA_Expert():
     def __init__(self):
         self.aminos = {}
 
+    def use_ideal_aminos(self):
+        """
+        Method for training our Amino Acid Expert on ideal amino acids.
+        Downloaded from wwPDB
+        :return:
+        """
+
+        print(f"retrieved")
+        name = "PDBs/Residues/ALA.cif"
+        file = open(name)
+
+        mmcif_dict = MMCIF2Dict(name)
+        # p_struct = parser.get_structure(file, file)
+
+        print(f'Printing')
+        print(mmcif_dict)
+        print(f'complete')
+
     def train_single_amino(self, Res: Residue.Residue):
         """
         :param Res: Residue to train our model on
@@ -82,6 +100,8 @@ parser = PDB.MMCIFParser(QUIET=True)
 if __name__ == "__main__":
 
     # download_all_aminos()
+    e = AA_Expert()
+    e.use_ideal_aminos()
 
     print(f"retrieved")
     name = "PDBs/Residues/ALA.cif"

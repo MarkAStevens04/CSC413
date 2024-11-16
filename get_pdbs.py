@@ -95,11 +95,6 @@ def calc_dist_mat(p_struct):
     # print(f'residue: {residue}')
 
 
-
-
-
-
-
     num_atoms = len(ca_atoms)
     distance_matrix = np.zeros((num_atoms, num_atoms))
     for i in range(num_atoms):
