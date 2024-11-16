@@ -4,3 +4,4 @@ matplotlib
 seaborn
 glob2
 wget
+requests

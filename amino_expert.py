@@ -118,7 +118,6 @@ class AA_Expert():
         # '_chem_comp_atom.pdbx_model_Cartn_x_ideal': ['-0.966', '0.257', '-0.094', '-1.056', '1.204', '0.661', '-1.383', '-0.676', '0.746', '1.459', '0.715', '2.113', '0.435']
 
 
-
     def train_single_amino(self, Res: Residue.Residue):
         """
         :param Res: Residue to train our model on
