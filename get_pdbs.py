@@ -126,7 +126,7 @@ def get_structs(names, display_first=True):
 
     plt.figure(figsize=(10, 8))
     sns.heatmap(dist_mats[0], cmap="viridis", square=True, cbar_kws={'label': 'Distance (A)'})
-    plt.title(f'Contact Map / Distance matrix for {files[0]}')
+    plt.title(f'Contact Map / Distance matrix for {files[0].name}')
 
 
 
