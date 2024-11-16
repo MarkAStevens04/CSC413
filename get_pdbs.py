@@ -73,7 +73,7 @@ def calc_dist_mat(p_struct):
         print(pp.get_sequence())
         print(f'len: {len(pp.get_sequence())}')
 
-
+    print(expert)
 
 
     # model = p_struct[0]
