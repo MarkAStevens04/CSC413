@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
+import amino_expert as aa
+
 # run "pip install -r requirements.txt"
 
 PID_DIR = "PDBs/protein-ids.txt"
@@ -48,6 +50,8 @@ def calc_dist_mat(p_struct):
     # Helpful for parsing structure
     # https://biopython.org/wiki/The_Biopython_Structural_Bioinformatics_FAQ
 
+    expert = aa.AA_Expert()
+
     ca_atoms = []
     for model in p_struct:
         for chain in model:
@@ -57,6 +61,8 @@ def calc_dist_mat(p_struct):
 
                 # here's how to check it's an amino acid residue (standard amino acid)
                 print(f'is residue? {Polypeptide.is_aa(residue)} {residue}')
+                if Polypeptide.is_aa(residue):
+                    expert.train_single_amino(residue)
 
                 if 'CA' in residue:
                     ca_atoms.append(residue['CA'].coord)
