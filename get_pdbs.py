@@ -140,7 +140,6 @@ def get_structs(names, display_first=True):
 
 if __name__ == '__main__':
     names = download_list()
-    # names = ["cat","dog"]
     dist_mat = get_structs(names[0:1])
     plt.show()
 

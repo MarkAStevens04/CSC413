@@ -64,10 +64,14 @@ class AA_Expert():
 
 
 def download_all_aminos():
+    """
+    Downloads all amino acids!
+    Source: https://www.rcsb.org/docs/programmatic-access/file-download-services
+    Example link: https://files.rcsb.org/ligands/download/HEM.cif
+    :return:
+    """
     amino_list = ["Ala", "Arg", "Asp", "Asn", "Cys", "Glu", "Gln", "Gly", "His", "Ile", "Leu", "Lys", "Met", "Phe", "Pro", "Ser", "Thr", "Trp", "Tyr", "Val"]
-    # urllib.request.urlretrieve("http://www.example.com/songs/mp3.mp3", "mp3.mp3")
     for res in amino_list:
-        # print(res.upper())
         url = "https://files.rcsb.org/ligands/download/" + res.upper() + ".cif"
         wget.download(url, out=RES_DIR)
 
@@ -76,10 +80,6 @@ parser = PDB.MMCIFParser(QUIET=True)
 
 
 if __name__ == "__main__":
-    # Source: https://www.rcsb.org/docs/programmatic-access/file-download-services
-    # https://files.rcsb.org/ligands/download/HEM_ideal.mol2
-    # https://files.rcsb.org/ligands/download/HEM.cif
-
 
     # download_all_aminos()
 
@@ -88,8 +88,6 @@ if __name__ == "__main__":
     file = open(name)
 
     mmcif_dict = MMCIF2Dict(name)
-
-
     # p_struct = parser.get_structure(file, file)
 
     print(f'Printing')
@@ -109,6 +107,5 @@ if __name__ == "__main__":
 
 
     # names = gp.download_list()
-    # # names = ["cat","dog"]
     # dist_mat = gp.get_structs(names[0:1])
     # plt.show()
