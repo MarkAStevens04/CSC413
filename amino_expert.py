@@ -28,7 +28,12 @@ class AA_Expert():
     Associated Methods for training and using the expert.
     """
     def __init__(self):
+        """
+        Helps convert between amino acid abbreviations and atom positions!
+        """
+        # self.aminos stores the atom positions from the amino acid name
         self.aminos = {}
+        # self.vocab becomes a list after we call use_ideal_aminos
         self.vocab = set()
 
     def use_ideal_aminos(self):
@@ -37,12 +42,11 @@ class AA_Expert():
         Downloaded from wwPDB
         :return:
         """
+        amino_all = dict()
         all_files = glob.glob(RES_DIR + '/*.cif')
         for file in all_files: # For every file in our Amino Acid folder
             mmcif_dict = MMCIF2Dict(file) # Turn MMCIF into dictionary
-            print(mmcif_dict)
             single_letter = mmcif_dict['_chem_comp.one_letter_code'][0]
-            print(f'single letter: {single_letter}')
             amino_atom_list = mmcif_dict['_chem_comp_atom.type_symbol']
             amino_backbone_flags = mmcif_dict['_chem_comp_atom.pdbx_backbone_atom_flag']
             amino_x  =mmcif_dict['_chem_comp_atom.pdbx_model_Cartn_x_ideal']
@@ -69,36 +73,27 @@ class AA_Expert():
                 else:
                     self.vocab.add(a)
 
-            self.aminos[single_letter] = (amino_atom_list, amino_backbone_flags, amino_x, amino_y, amino_z)
+            amino_all[single_letter] = (amino_atom_list, amino_backbone_flags, amino_x, amino_y, amino_z)
 
 
         # Encode atom names into integer list
-        print(f'built vocab! {self.vocab}')
         possible_atoms = sorted(list(set(self.vocab)))
 
         stoi = { ch:i for i,ch in enumerate(possible_atoms)}
         itos = { i:ch for i,ch in enumerate(possible_atoms)}
 
-        print(f'stoi: {stoi}')
-        print(f'itos: {itos}')
-
         self.encode = lambda s: [stoi[c] for c in s]
         self.decode = lambda l: ''.join([itos[i] for i in l])
 
-        print(f"encodings: {self.encode(['CB'])}")
-        print(f"more enco:  {self.encode(['C'])}")
 
+        for amino_abbrev in amino_all:
+            amino_atom_list = amino_all[amino_abbrev][0]
+            amino_backbone_flags = amino_all[amino_abbrev][1]
+            amino_x = amino_all[amino_abbrev][2]
+            amino_y = amino_all[amino_abbrev][3]
+            amino_z = amino_all[amino_abbrev][4]
 
-        for amino_abbrev in self.aminos:
-            # print(f'amino dict: {self.aminos[amino_abbrev]}')
-            amino_atom_list = self.aminos[amino_abbrev][0]
-            amino_backbone_flags = self.aminos[amino_abbrev][1]
-            amino_x = self.aminos[amino_abbrev][2]
-            amino_y = self.aminos[amino_abbrev][3]
-            amino_z = self.aminos[amino_abbrev][4]
-
-            amino_dict = np.random.random((1, 4))
-            print(f'starting amino dict: {amino_dict}')
+            amino_list = np.random.random((1, 4))
 
 
             # Possibly change this in the future to only have NCC contain backbone flag!
@@ -110,21 +105,17 @@ class AA_Expert():
                     atom_name = a
 
                 entry = [[self.encode([atom_name])[0], float(x), float(y), float(z)]]
-                print(f'entry: {entry}')
-                amino_dict = np.append(amino_dict, entry, axis=0)
+                amino_list = np.append(amino_list, entry, axis=0)
 
-            print(f'full amino dict: {amino_dict}')
-            amino_dict = np.delete(amino_dict, 0, axis=0)
-            print(f'full amino dict: {amino_dict}')
-
+            amino_list = np.delete(amino_list, 0, axis=0)
+            self.aminos[amino_abbrev] = amino_list
+        # print(f'entire self.aminos: {self.aminos}')
 
         # '_chem_comp.one_letter_code': ['A']
         # '_chem_comp_atom.atom_id': ['N', 'CA', 'C', 'O', 'CB', 'OXT', 'H', 'H2', 'HA', 'HB1', 'HB2', 'HB3', 'HXT']
         # '_chem_comp_atom.type_symbol': ['N', 'C', 'C', 'O', 'C', 'O', 'H', 'H', 'H', 'H', 'H', 'H', 'H'],
         # '_chem_comp_atom.pdbx_backbone_atom_flag': ['Y', 'Y', 'Y', 'Y', 'N', 'Y', 'Y', 'Y', 'Y', 'N', 'N', 'N', 'Y']
         # '_chem_comp_atom.pdbx_model_Cartn_x_ideal': ['-0.966', '0.257', '-0.094', '-1.056', '1.204', '0.661', '-1.383', '-0.676', '0.746', '1.459', '0.715', '2.113', '0.435']
-
-
 
 
 
