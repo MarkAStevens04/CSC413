@@ -173,6 +173,11 @@ if __name__ == "__main__":
     # download_all_aminos()
     e = AA_Expert()
     e.use_ideal_aminos()
+    print(e.aminos)
+    print(e.vocab)
+
+    print(f'---')
+    print(e.encode(['C']))
 
 
 
