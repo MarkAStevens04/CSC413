@@ -21,7 +21,7 @@ mmCIF_DIR = "PDBs/all"
 
 parser = PDB.MMCIFParser(QUIET=True)
 
-def download_list(max_download=10):
+def download_list(max_download=30):
     """
     Download PDB files from rcsb. Uses PID_DIR to get list of proteins to download.
     Returns the list of all PDBs being used
@@ -30,7 +30,7 @@ def download_list(max_download=10):
     :return: list of downloaded proteins
     """
     # each entry is roughly 1MB (Downloading 1,000 PDB would be roughly 1GB)
-    pdb_list = PDBList()
+    pdb_list = PDBList(server="https://files.wwpdb.org/")
     # get all 4 letter codes of desired proteins
     names = open(PID_DIR, "r+").readline().split(',')
 
@@ -108,11 +108,14 @@ def polypeptide_interpreter(p_struct: PDB.Structure.Structure, seq):
 
 
 
+
+
         print(f'start: {start}, end: {end}')
         print(pp.get_sequence())
         print(pp)
         print(f'len: {len(pp.get_sequence())}')
 
+    print(f'seq: {seq}')
 
 
 
@@ -140,7 +143,7 @@ def get_structs(names, display_first=True):
             print(record.dbxrefs)
             print(record.seq)
             s = record.seq
-
+        print(f'-----------')
         polypeptides = polypeptide_interpreter(p_struct, s)
         dist_mat = calc_dist_mat(p_struct)
         dist_mats.append(dist_mat)
