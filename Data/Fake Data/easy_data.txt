@@ -61,7 +61,7 @@
 
 
 
-# Output
+# ----- Output -----
 # Only change is that our final feature now means whether we know the position of the amino acid or not!
 # 1 means we know, 0 means we do not know.
 [[ 5.   , -0.956,  0.403,  1.52, 1.  ],
