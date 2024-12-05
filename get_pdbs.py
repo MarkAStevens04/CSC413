@@ -12,6 +12,7 @@ import seaborn as sns
 import numpy as np
 import requests
 
+
 import amino_expert as aa
 
 # run "pip install -r requirements.txt"
@@ -78,6 +79,8 @@ def calc_dist_mat(p_struct):
 
     return distance_matrix
 
+
+
 def polypeptide_interpreter(p_struct: PDB.Structure.Structure, seq):
     """
     Interprets the peptide segments in our protein structure
@@ -107,15 +110,24 @@ def polypeptide_interpreter(p_struct: PDB.Structure.Structure, seq):
         print(f'modified: {pp.get_sequence()}')
 
 
-
-
-
         print(f'start: {start}, end: {end}')
         print(pp.get_sequence())
         print(pp)
         print(f'len: {len(pp.get_sequence())}')
 
     print(f'seq: {seq}')
+    output_str = 'ppt: '
+    prev = 0
+    for pp in ppb.build_peptides(p_struct):
+        start = pp[0].id[1] - 1
+        output_str += '-' * (start - prev)
+        output_str += pp.get_sequence()
+        prev = pp[-1].id[1]
+    start = len(seq)
+    output_str += '-' * (start - prev)
+    print(output_str)
+
+
 
 
 
@@ -142,6 +154,18 @@ def get_structs(names, display_first=True):
             print("Record id %s, chain %s" % (record.id, record.annotations["chain"]))
             print(record.dbxrefs)
             print(record.seq)
+            # Just for some data exploration!
+            # print(dir(record))
+            # print(f'dbxrefs: {record.dbxrefs}')
+            # print(f'sequence: {record.seq}')
+            # print(f'count: {record.count}')
+            # print(f'description: {record.description}')
+            # print(f'features: {record.features}')
+            # print(f'format: {record.format}')
+            # print(f'id: {record.id}')
+            # print(f'letter annotations: {record.letter_annotations}')
+            # print(f'name: {record.name}')
+
             s = record.seq
         print(f'-----------')
         polypeptides = polypeptide_interpreter(p_struct, s)

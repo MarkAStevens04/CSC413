@@ -13,6 +13,7 @@ import numpy as np
 # import urllib.request
 import wget
 import os
+# possibly import wget?
 
 import get_pdbs as gp
 
