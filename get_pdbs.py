@@ -231,22 +231,35 @@ def get_structs(names, display_first=True):
     print(f"_struct_ref_seq.pdbx_strand_id: {pdb_info['_struct_ref_seq.pdbx_strand_id']}")
     print()
     print(f"_pdbx_poly_seq_scheme.pdb_seq_num: {pdb_info['_pdbx_poly_seq_scheme.pdb_seq_num']}")
-    print(f"_pdbx_poly_seq_scheme.asym_id: {pdb_info['_pdbx_poly_seq_scheme.asym_id']}")
+    print(f"_pdbx_poly_seq_scheme.entity_id  : {pdb_info['_pdbx_poly_seq_scheme.entity_id']}")
+    print(f"_pdbx_poly_seq_scheme.asym_id    : {pdb_info['_pdbx_poly_seq_scheme.asym_id']}")
+
 
     print()
     print(f'sequence:')
     for i_str in pdb_info['_entity_src_gen.entity_id']:
         print(f'i id: {str(i_str)}')
 
+
+    ptein_peps = []
+    # for each peptide...
     for pep_id in pdb_info['_entity_poly.entity_id']:
+        # extract the id
         id = int(pep_id) - 1
         type = pdb_info['_entity_poly.type'][id]
         print(f"type: {type}")
         chain_letter = pdb_info['_struct_ref_seq.pdbx_strand_id'][id]
         print(f"chain: {chain_letter}")
         if type == 'polypeptide(L)':
+            # we found a desirable polypeptide!
             print(f'**************************************************')
             print(f'SLAYYYYY WE HAVE A POLYPEPTIDE!!!')
+            for chain_id, start_idx in zip(pdb_info['_struct_ref_seq.pdbx_auth_seq_align_beg'], pdb_info['_struct_ref_seq.ref_id']):
+                if chain_id == str(id + 1):
+                    print(f'found our starting index!!')
+                    ptein_peps.append((chain_letter, start_idx))
+
+
 
     # Goal: get the type of the polomer (protein, not DNA), then cross-reference with
     # cif parser to get the final sequence.
@@ -277,6 +290,7 @@ def get_structs(names, display_first=True):
     # _entity_poly.pdbx_strand_id: ['A,C', 'B,E', 'D,F'] (D,F)
     # _pdbx_poly_seq_scheme.ndb_seq_num
     # _pdbx_poly_seq_scheme.seq_id
+    # _pdbx_poly_seq_scheme.entity_id
     #
 
     # for key in pdb_info:
@@ -291,32 +305,61 @@ def get_structs(names, display_first=True):
         s = ''
 
         pdb_info = MMCIF2Dict(name)
-        peptides = []
+        # peptides = []
+        # for pep_id in pdb_info['_entity_poly.entity_id']:
+        #     id = int(pep_id) - 1
+        #     type = pdb_info['_entity_poly.type'][id]
+        #     # print(f"type: {type}")
+        #     chain_letter = pdb_info['_struct_ref_seq.pdbx_strand_id'][id]
+        #     # print(f"chain: {chain_letter}")
+        #     if type == 'polypeptide(L)':
+        #         # print(f'**************************************************')
+        #         # print(f'SLAYYYYY WE HAVE A POLYPEPTIDE!!!')
+        #         # print(f"start seq: {pdb_info['_struct_ref.pdbx_align_begin'][id]}")
+        #         s += '-' * (int(pdb_info['_struct_ref.pdbx_align_begin'][id]) - 1)
+        #         peptides.append(chain_letter)
+        #         s += pdb_info['_entity_poly.pdbx_seq_one_letter_code'][id].replace('\n', '')
+
+
+        print(f'()()()()()()()()()()()()()()()()()()()()()()()()()()()()')
+
+        ptein_peps = []
+        # for each peptide...
         for pep_id in pdb_info['_entity_poly.entity_id']:
+            # extract the id
+            found = False
             id = int(pep_id) - 1
             type = pdb_info['_entity_poly.type'][id]
-            # print(f"type: {type}")
+            print(f"type: {type}")
             chain_letter = pdb_info['_struct_ref_seq.pdbx_strand_id'][id]
-            # print(f"chain: {chain_letter}")
+            print(f"chain: {chain_letter}")
             if type == 'polypeptide(L)':
-                # print(f'**************************************************')
-                # print(f'SLAYYYYY WE HAVE A POLYPEPTIDE!!!')
-                # print(f"start seq: {pdb_info['_struct_ref.pdbx_align_begin'][id]}")
-                s += '-' * (int(pdb_info['_struct_ref.pdbx_align_begin'][id]) - 1)
-                peptides.append(chain_letter)
-                s += pdb_info['_entity_poly.pdbx_seq_one_letter_code'][id].replace('\n', '')
+                # we found a desirable polypeptide!
+                print(f'**************************************************')
+                print(f'SLAYYYYY WE HAVE A POLYPEPTIDE!!!')
+                for chain_id, start_idx, chain_name in zip(pdb_info['_pdbx_poly_seq_scheme.entity_id'],
+                                               pdb_info['_pdbx_poly_seq_scheme.pdb_seq_num'],
+                                               pdb_info['_pdbx_poly_seq_scheme.asym_id']):
+                    # print(f'chain_id: {chain_id}')
+                    # print(f'start_idx: {start_idx}')
+                    if chain_id == str(id + 1) and not found:
+                        print(f'found our starting index!!')
+                        ptein_peps.append((chain_name, start_idx))
+                        found = True
+                        s += '-' * (int(start_idx) - 1)
+                        s += pdb_info['_entity_poly.pdbx_seq_one_letter_code'][id].replace('\n', '')
 
-
+        print(f'ptein peps: {ptein_peps}')
+        print(f'')
 
         # for record in SeqIO.parse(name, "cif-seqres"):
-        print(f'*** Records:')
+        # print(f'*** Records:')
         # record_dict = SeqIO.to_dict(SeqIO.parse(name, "cif-seqres"))
         # print(f'record dict: {record_dict}')
-        for index, record in enumerate(SeqIO.parse(name, "cif-seqres")):
-            print(record)
+        # for index, record in enumerate(SeqIO.parse(name, "cif-seqres")):
+        #     print(record)
 
         for record in SeqIO.parse(name, "cif-seqres"):
-
 
 
             print("Record id %s, chain %s" % (record.id, record.annotations["chain"]))
@@ -337,7 +380,7 @@ def get_structs(names, display_first=True):
             # print(f'letter annotations: {record.letter_annotations}')
             # print(f'name: {record.name}')
 
-            print(f'sequence 2: {record.format("embl")}')
+            # print(f'sequence 2: {record.format("embl")}')
             # embl, stockholm, fasta, fasta-2line
             #
             # working: clustal, embl, fasta, fasta-2line, gb, imgt, nexus, phylip, pir, tab
