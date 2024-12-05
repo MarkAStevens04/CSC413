@@ -5,6 +5,7 @@ from Bio.PDB import Selection
 from Bio.PDB import Structure
 from Bio.PDB import Polypeptide
 from Bio.PDB.Polypeptide import PPBuilder
+from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 import glob2
 import glob
 import matplotlib.pyplot as plt
@@ -80,6 +81,43 @@ def calc_dist_mat(p_struct):
     return distance_matrix
 
 
+def sequence_construction(p_struct: PDB.Structure.Structure, seq):
+    """
+    Outputs the original sequence alongside the position sequence.
+    Used to determine which amino acids we know the position of, and which we do not.
+    = Future optimization: =
+     Instead of 2nd string being list of letters and dashes, just have it be 1s and 0s corresponding to
+     whether we know the position or not.
+    :param p_struct:
+    :param seq:
+    :return:
+    """
+    ppb = PPBuilder()
+    print(f'seq: {seq}')
+    output_str = 'ppt: '
+    prev = 0
+    for pp in ppb.build_peptides(p_struct):
+        start = pp[0].id[1] - 1
+        output_str += '-' * (start - prev)
+        output_str += pp.get_sequence()
+        prev = pp[-1].id[1]
+    start = len(seq)
+    output_str += '-' * (start - prev)
+    print(output_str)
+    print(f'-----------')
+    for model in p_struct:
+        for chain in model:
+            residues = Selection.unfold_entities(chain, "R")
+            print(residues)
+            for residue in chain:
+                print(residue.id)
+    print(f'MMCIF PARSER ------------------------')
+
+    print(f'**********')
+
+
+
+
 
 def polypeptide_interpreter(p_struct: PDB.Structure.Structure, seq):
     """
@@ -136,6 +174,17 @@ def get_structs(names, display_first=True):
     """
     Gets the structures from the names list.
     Should be stored in the mmCIF_DIR
+
+    = Possible extensions =
+    - allow for input of different annotations. "artifact", mutation, etc.
+    - multi-sequence allignment? Perform an allignment to see if these structure motifs already exist in wild
+    - ADD OUTPUT OF SEQUENCE ANNOTATIONS?? Prediction on where DNA would bind, stuff like that?
+            - Info is found on sequence annotations
+            - *** Predict under what conditions protein will crystallize best?? (_exptl_crystal_grow.pdbx_details, _exptl_crystal_grow.method, _exptl_crystal_grow.temp)
+                - From the key dict: _exptl_crystal_grow.pdbx_details
+            - *** Predict what type of method will be best? (_exptl.method) '_exptl.method'
+    - Maybe have our output also include molecule details like heteroatom, binding, etc.
+
     :param names:
     :return:
     """
@@ -144,16 +193,54 @@ def get_structs(names, display_first=True):
     i = 0
     # print(f'name: {names}')
     names = [mmCIF_DIR + "/" + name + ".cif" for name in names]
+    pdb_info = MMCIF2Dict(names[0])
+    print(f"_entity.id : {pdb_info['_entity.id']}")
+    print(f"_entity.type: {pdb_info['_entity.type']}")
+    print(f"_entity.src_method: {pdb_info['_entity.src_method']}")
+    print(f"_entity.pdbx_description: {pdb_info['_entity.pdbx_description']}")
+    print(f"_entity.pdbx_number_of_molecules: {pdb_info['_entity.pdbx_number_of_molecules']}")
+    print(f"_entity.details: {pdb_info['_entity.details']}")
+    print(f"_entity_poly.entity_id: {pdb_info['_entity_poly.entity_id']}")
+    print(f"_entity_poly.nstd_monomer: {pdb_info['_entity_poly.nstd_monomer']}")
+    print(f"_entity_poly.type: {pdb_info['_entity_poly.type']}")
+    print(f"_entity_poly.pdbx_seq_one_letter_code: {pdb_info['_entity_poly.pdbx_seq_one_letter_code']}")
+    print(f"_entity_poly.pdbx_seq_one_letter_code_can: {pdb_info['_entity_poly.pdbx_seq_one_letter_code_can']}")
+    print(f"_entity_poly.pdbx_strand_id: {pdb_info['_entity_poly.pdbx_strand_id']}")
+    print(f"_entity_poly.pdbx_target_identifier: {pdb_info['_entity_poly.pdbx_target_identifier']}")
+    print(f"_entity_poly_seq.entity_id: {pdb_info['_entity_poly_seq.entity_id']}")
+    print(f"_entity_poly_seq.num: {pdb_info['_entity_poly_seq.num']}")
+    print(f"_entity_poly_seq.mon_id: {pdb_info['_entity_poly_seq.mon_id']}")
+    print(f"_entity_poly_seq.hetero: {pdb_info['_entity_poly_seq.hetero']}")
+    print(f"_entity.details: {pdb_info['_entity.details']}")
+    print(f"_entity_poly.pdbx_target_identifier : {pdb_info['_entity_poly.pdbx_target_identifier']}")
+
+    # Goal: get the type of the polomer (protein, not DNA), then cross-reference with
+    # cif parser to get the final sequence.
+
+    # to investigate:
+    # _struct_ref.pdbx_seq_one_letter_code
+    # '_struct_ref_seq.pdbx_strand_id
+    # _struct_ref_seq.seq_align_beg
+
+    # -------------------------- SOLUTION!!!!!! ------------------------------
+    # _entity_poly.type:
+    # _entity_poly.pdbx_seq_one_letter_code: Maybe don't need to use this one?
+    # _entity_poly.pdbx_strand_id: ['A,C', 'B,E', 'D,F'] (D,F)
+
+    for key in pdb_info:
+        print(f'key: {key}')
+    print(f'pdb info: {pdb_info}')
+    print(f'---')
     files = [open(name) for name in names]
 
     dist_mats = []
     for pid_file, name in zip(files, names):
         p_struct = parser.get_structure(pid_file, pid_file)
-        s = None
+        s = ''
         for record in SeqIO.parse(name, "cif-seqres"):
             print("Record id %s, chain %s" % (record.id, record.annotations["chain"]))
-            print(record.dbxrefs)
-            print(record.seq)
+            # print(record.dbxrefs)
+            # print(record.seq)
             # Just for some data exploration!
             # print(dir(record))
             # print(f'dbxrefs: {record.dbxrefs}')
@@ -166,9 +253,20 @@ def get_structs(names, display_first=True):
             # print(f'letter annotations: {record.letter_annotations}')
             # print(f'name: {record.name}')
 
-            s = record.seq
+
+            # print(f'sequence 2: {record.format("stockholm")}')
+            # embl, stockholm,
+            if record.seq == 'XXXXXXXXXXXXXXXX':
+                print(f'NOT adding record: {record}')
+            else:
+                print(f'adding record!! {record}')
+                s += record.seq
+
+            print()
+
+
         print(f'-----------')
-        polypeptides = polypeptide_interpreter(p_struct, s)
+        polypeptides = sequence_construction(p_struct, s)
         dist_mat = calc_dist_mat(p_struct)
         dist_mats.append(dist_mat)
 
@@ -183,7 +281,7 @@ def obtain_training():
     :return:
     """
     names = download_list()
-    dist_mat = get_structs(names[0:1])
+    dist_mat = get_structs(names[1:2])
     plt.show()
 
 
@@ -196,5 +294,5 @@ if __name__ == '__main__':
     # plt.show()
 
 
-
-
+    # Notable proteins:
+    # 6L6Y
