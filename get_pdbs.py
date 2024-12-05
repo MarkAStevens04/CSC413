@@ -99,7 +99,6 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
 
     for pp in ppb.build_peptides(p_struct):
         start_idx = pp[0].id[1] - 1
-        print(f'start_idx: {start_idx}')
 
         # cut off extra letters!
         # Happens when proteins are defined twice.
@@ -118,18 +117,6 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     start_idx = len(seq)
     output_str += '-' * (start_idx - prev_idx)
     print(output_str)
-    print(f'-----------')
-    for pp in ppb.build_peptides(p_struct):
-        print(pp.get_sequence())
-    for model in p_struct:
-        for chain in model:
-            residues = Selection.unfold_entities(chain, "R")
-            print(residues)
-            # for residue in chain:
-                # print(residue.id)
-    # print(f'MMCIF PARSER ------------------------')
-    #
-    # print(f'**********')
 
 
 
@@ -334,7 +321,7 @@ def get_structs(names, display_first=True):
         #         s += pdb_info['_entity_poly.pdbx_seq_one_letter_code'][id].replace('\n', '')
 
 
-        print(f'()()()()()()()()()()()()()()()()()()()()()()()()()()()()')
+        print(f'()()()()()()()()()()()()()()()()()()()()()()()()()()()() {name}')
 
         ptein_peps = []
         # for each peptide...
@@ -348,15 +335,13 @@ def get_structs(names, display_first=True):
             print(f"chain: {chain_letter}")
             if type == 'polypeptide(L)':
                 # we found a desirable polypeptide!
-                print(f'**************************************************')
-                print(f'SLAYYYYY WE HAVE A POLYPEPTIDE!!!')
+                # print(f'**************************************************')
+                # print(f'SLAYYYYY WE HAVE A POLYPEPTIDE!!!')
                 for chain_id, start_idx, chain_name in zip(pdb_info['_pdbx_poly_seq_scheme.entity_id'],
                                                pdb_info['_pdbx_poly_seq_scheme.pdb_seq_num'],
                                                pdb_info['_pdbx_poly_seq_scheme.asym_id']):
-                    # print(f'chain_id: {chain_id}')
-                    # print(f'start_idx: {start_idx}')
                     if chain_id == str(id + 1) and not found:
-                        print(f'found our starting index!!')
+                        # print(f'found our starting index!!')
                         ptein_peps.append((chain_name, start_idx))
                         found = True
                         s += '-' * (int(start_idx) - 1)
@@ -372,15 +357,15 @@ def get_structs(names, display_first=True):
         # for index, record in enumerate(SeqIO.parse(name, "cif-seqres")):
         #     print(record)
 
-        for record in SeqIO.parse(name, "cif-seqres"):
+        # for record in SeqIO.parse(name, "cif-seqres"):
 
 
-            print("Record id %s, chain %s" % (record.id, record.annotations["chain"]))
-            print(f'record annotations: {record.annotations}')
+            # print("Record id %s, chain %s" % (record.id, record.annotations["chain"]))
+            # print(f'record annotations: {record.annotations}')
             # print(record.seq[0])
 
             # print(record.dbxrefs)
-            print(record.seq)
+            # print(record.seq)
             # Just for some data exploration!
             # print(dir(record))
             # print(f'dbxrefs: {record.dbxrefs}')
@@ -413,7 +398,7 @@ def get_structs(names, display_first=True):
             #     print(record)
             #     s += record.seq
 
-            print()
+            # print()
 
 
         print(f'-----------')
@@ -446,4 +431,4 @@ if __name__ == '__main__':
 
 
     # Notable proteins:
-    # 6L6Y
+    # 6L6Y, 6JUX
