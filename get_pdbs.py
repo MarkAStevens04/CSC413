@@ -96,6 +96,9 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     print(f'seq: {seq}')
     output_str = 'ppt: '
     prev = 0
+    # for pp in ppb.build_peptides(p_struct):
+    #     print(f'peptide pp: {pp.get_sequence()}')
+
     for pp in ppb.build_peptides(p_struct):
         start = pp[0].id[1] - 1
         output_str += '-' * (start - prev)
@@ -108,12 +111,12 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     for model in p_struct:
         for chain in model:
             residues = Selection.unfold_entities(chain, "R")
-            # print(residues)
+            print(residues)
             # for residue in chain:
                 # print(residue.id)
-    print(f'MMCIF PARSER ------------------------')
-
-    print(f'**********')
+    # print(f'MMCIF PARSER ------------------------')
+    #
+    # print(f'**********')
 
 
 
@@ -226,6 +229,9 @@ def get_structs(names, display_first=True):
     print(f"_entity_poly.pdbx_strand_id: {pdb_info['_entity_poly.pdbx_strand_id']}")
     print(f"_struct_ref.pdbx_seq_one_letter_code {pdb_info['_struct_ref.pdbx_seq_one_letter_code']}")
     print(f"_struct_ref_seq.pdbx_strand_id: {pdb_info['_struct_ref_seq.pdbx_strand_id']}")
+    print()
+    print(f"_pdbx_poly_seq_scheme.pdb_seq_num: {pdb_info['_pdbx_poly_seq_scheme.pdb_seq_num']}")
+    print(f"_pdbx_poly_seq_scheme.asym_id: {pdb_info['_pdbx_poly_seq_scheme.asym_id']}")
 
     print()
     print(f'sequence:')
@@ -249,11 +255,29 @@ def get_structs(names, display_first=True):
     # _struct_ref.pdbx_seq_one_letter_code
     # _struct_ref_seq.pdbx_strand_id
     # _struct_ref_seq.seq_align_beg
+    # _struct_ref_seq.db_align_beg
+    # _struct_ref_seq.pdbx_auth_seq_align_beg
+    # _struct_ref_seq.ref_id
+
+    print(f"_struct_ref.pdbx_seq_one_letter_code: {pdb_info['_struct_ref.pdbx_seq_one_letter_code']}")
+    print(f"_struct_ref_seq.pdbx_strand_id: {pdb_info['_struct_ref_seq.pdbx_strand_id']}")
+    print(f"_struct_ref_seq.seq_align_beg: {pdb_info['_struct_ref_seq.seq_align_beg']}")
+    print(f"_struct_ref_seq.db_align_beg: {pdb_info['_struct_ref_seq.db_align_beg']}")
+    print(f"_struct_ref_seq.pdbx_auth_seq_align_beg: {pdb_info['_struct_ref_seq.pdbx_auth_seq_align_beg']}")
+    print(f"_struct_ref_seq.ref_id: {pdb_info['_struct_ref_seq.ref_id']}")
+    print(f"_struct_ref.pdbx_align_begin: {pdb_info['_struct_ref.pdbx_align_begin']}")
+    print(f"")
+    print(f"")
+    print(f"")
+
 
     # -------------------------- SOLUTION!!!!!! ------------------------------
     # _entity_poly.type:
     # _entity_poly.pdbx_seq_one_letter_code: Maybe don't need to use this one?
     # _entity_poly.pdbx_strand_id: ['A,C', 'B,E', 'D,F'] (D,F)
+    # _pdbx_poly_seq_scheme.ndb_seq_num
+    # _pdbx_poly_seq_scheme.seq_id
+    #
 
     # for key in pdb_info:
     #     print(f'key: {key}')
@@ -266,23 +290,38 @@ def get_structs(names, display_first=True):
         p_struct = parser.get_structure(pid_file, pid_file)
         s = ''
 
-        pdb_info = MMCIF2Dict(names[1])
+        pdb_info = MMCIF2Dict(name)
         peptides = []
         for pep_id in pdb_info['_entity_poly.entity_id']:
             id = int(pep_id) - 1
             type = pdb_info['_entity_poly.type'][id]
-            print(f"type: {type}")
+            # print(f"type: {type}")
             chain_letter = pdb_info['_struct_ref_seq.pdbx_strand_id'][id]
-            print(f"chain: {chain_letter}")
+            # print(f"chain: {chain_letter}")
             if type == 'polypeptide(L)':
-                print(f'**************************************************')
-                print(f'SLAYYYYY WE HAVE A POLYPEPTIDE!!!')
+                # print(f'**************************************************')
+                # print(f'SLAYYYYY WE HAVE A POLYPEPTIDE!!!')
+                # print(f"start seq: {pdb_info['_struct_ref.pdbx_align_begin'][id]}")
+                s += '-' * (int(pdb_info['_struct_ref.pdbx_align_begin'][id]) - 1)
                 peptides.append(chain_letter)
+                s += pdb_info['_entity_poly.pdbx_seq_one_letter_code'][id].replace('\n', '')
 
 
+
+        # for record in SeqIO.parse(name, "cif-seqres"):
+        print(f'*** Records:')
+        # record_dict = SeqIO.to_dict(SeqIO.parse(name, "cif-seqres"))
+        # print(f'record dict: {record_dict}')
+        for index, record in enumerate(SeqIO.parse(name, "cif-seqres")):
+            print(record)
 
         for record in SeqIO.parse(name, "cif-seqres"):
+
+
+
             print("Record id %s, chain %s" % (record.id, record.annotations["chain"]))
+            print(f'record annotations: {record.annotations}')
+            # print(record.seq[0])
 
             # print(record.dbxrefs)
             print(record.seq)
@@ -298,9 +337,12 @@ def get_structs(names, display_first=True):
             # print(f'letter annotations: {record.letter_annotations}')
             # print(f'name: {record.name}')
 
+            print(f'sequence 2: {record.format("embl")}')
+            # embl, stockholm, fasta, fasta-2line
+            #
+            # working: clustal, embl, fasta, fasta-2line, gb, imgt, nexus, phylip, pir, tab
+            # helpful: clustal, ***embl***, fasta, imgt
 
-            # print(f'sequence 2: {record.format("stockholm")}')
-            # embl, stockholm,
 
 
             # if record.seq == 'XXXXXXXXXXXXXXXX':
@@ -310,10 +352,10 @@ def get_structs(names, display_first=True):
             #     s += record.seq
 
 
-            if record.annotations["chain"] in peptides:
-                print(f'adding to chain...')
-                print(record)
-                s += record.seq
+            # if record.annotations["chain"] in peptides:
+            #     print(f'adding to chain...')
+            #     print(record)
+            #     s += record.seq
 
             print()
 
@@ -334,7 +376,7 @@ def obtain_training():
     :return:
     """
     names = download_list()
-    dist_mat = get_structs(names[0:2])
+    dist_mat = get_structs(names[0:6])
     plt.show()
 
 
