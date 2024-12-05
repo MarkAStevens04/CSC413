@@ -95,19 +95,32 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     ppb = PPBuilder()
     print(f'seq: {seq}')
     output_str = 'ppt: '
-    prev = 0
-    # for pp in ppb.build_peptides(p_struct):
-    #     print(f'peptide pp: {pp.get_sequence()}')
+    prev_idx = 0
 
     for pp in ppb.build_peptides(p_struct):
-        start = pp[0].id[1] - 1
-        output_str += '-' * (start - prev)
-        output_str += pp.get_sequence()
-        prev = pp[-1].id[1]
-    start = len(seq)
-    output_str += '-' * (start - prev)
+        start_idx = pp[0].id[1] - 1
+        print(f'start_idx: {start_idx}')
+
+        # cut off extra letters!
+        # Happens when proteins are defined twice.
+        # This is because we only want to train our model on a single sequence at a time.
+        # We do this so it can hopefully learn to recognize when multiple proteins might be present.
+        remove = max(prev_idx - start_idx, 0)
+
+        output_str += '-' * (start_idx - prev_idx)
+        output_str += pp.get_sequence()[remove:]
+        # keep the highest from prev_idx and end of this string.
+        # We already added elements up to prev_idx, we don't want to add them again
+        # in a later string!
+        prev_idx = max(pp[-1].id[1], prev_idx)
+
+    # Repeat again at the end in case our protein ends with an unknown
+    start_idx = len(seq)
+    output_str += '-' * (start_idx - prev_idx)
     print(output_str)
     print(f'-----------')
+    for pp in ppb.build_peptides(p_struct):
+        print(pp.get_sequence())
     for model in p_struct:
         for chain in model:
             residues = Selection.unfold_entities(chain, "R")
