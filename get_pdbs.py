@@ -108,9 +108,9 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     for model in p_struct:
         for chain in model:
             residues = Selection.unfold_entities(chain, "R")
-            print(residues)
-            for residue in chain:
-                print(residue.id)
+            # print(residues)
+            # for residue in chain:
+                # print(residue.id)
     print(f'MMCIF PARSER ------------------------')
 
     print(f'**********')
@@ -132,7 +132,6 @@ def polypeptide_interpreter(p_struct: PDB.Structure.Structure, seq):
             print(residues)
             for residue in chain:
                 print(residue.id)
-
 
 
 
@@ -193,7 +192,7 @@ def get_structs(names, display_first=True):
     i = 0
     # print(f'name: {names}')
     names = [mmCIF_DIR + "/" + name + ".cif" for name in names]
-    pdb_info = MMCIF2Dict(names[0])
+    pdb_info = MMCIF2Dict(names[1])
     print(f"_entity.id : {pdb_info['_entity.id']}")
     print(f"_entity.type: {pdb_info['_entity.type']}")
     print(f"_entity.src_method: {pdb_info['_entity.src_method']}")
@@ -213,13 +212,42 @@ def get_structs(names, display_first=True):
     print(f"_entity_poly_seq.hetero: {pdb_info['_entity_poly_seq.hetero']}")
     print(f"_entity.details: {pdb_info['_entity.details']}")
     print(f"_entity_poly.pdbx_target_identifier : {pdb_info['_entity_poly.pdbx_target_identifier']}")
+    print(f"_struct_ref.pdbx_seq_one_letter_code {pdb_info['_struct_ref.pdbx_seq_one_letter_code']}")
+    print(f"_struct_ref_seq.pdbx_strand_id: {pdb_info['_struct_ref_seq.pdbx_strand_id']}")
+    print(f"_struct_ref_seq.seq_align_beg: {pdb_info['_struct_ref_seq.seq_align_beg']}")
+
+
+    print()
+
+    print(f"_entity_src_gen.entity_id: {pdb_info['_entity_src_gen.entity_id']}")
+    print(f"_entity_src_gen.pdbx_src_id: {pdb_info['_entity_src_gen.pdbx_src_id']}")
+    print(f"_entity.id : {pdb_info['_entity.id']}")
+    print(f"_entity_poly.type: {pdb_info['_entity_poly.type']}")
+    print(f"_entity_poly.pdbx_strand_id: {pdb_info['_entity_poly.pdbx_strand_id']}")
+    print(f"_struct_ref.pdbx_seq_one_letter_code {pdb_info['_struct_ref.pdbx_seq_one_letter_code']}")
+    print(f"_struct_ref_seq.pdbx_strand_id: {pdb_info['_struct_ref_seq.pdbx_strand_id']}")
+
+    print()
+    print(f'sequence:')
+    for i_str in pdb_info['_entity_src_gen.entity_id']:
+        print(f'i id: {str(i_str)}')
+
+    for pep_id in pdb_info['_entity_poly.entity_id']:
+        id = int(pep_id) - 1
+        type = pdb_info['_entity_poly.type'][id]
+        print(f"type: {type}")
+        chain_letter = pdb_info['_struct_ref_seq.pdbx_strand_id'][id]
+        print(f"chain: {chain_letter}")
+        if type == 'polypeptide(L)':
+            print(f'**************************************************')
+            print(f'SLAYYYYY WE HAVE A POLYPEPTIDE!!!')
 
     # Goal: get the type of the polomer (protein, not DNA), then cross-reference with
     # cif parser to get the final sequence.
 
     # to investigate:
     # _struct_ref.pdbx_seq_one_letter_code
-    # '_struct_ref_seq.pdbx_strand_id
+    # _struct_ref_seq.pdbx_strand_id
     # _struct_ref_seq.seq_align_beg
 
     # -------------------------- SOLUTION!!!!!! ------------------------------
@@ -227,20 +255,37 @@ def get_structs(names, display_first=True):
     # _entity_poly.pdbx_seq_one_letter_code: Maybe don't need to use this one?
     # _entity_poly.pdbx_strand_id: ['A,C', 'B,E', 'D,F'] (D,F)
 
-    for key in pdb_info:
-        print(f'key: {key}')
-    print(f'pdb info: {pdb_info}')
-    print(f'---')
+    # for key in pdb_info:
+    #     print(f'key: {key}')
+    # print(f'pdb info: {pdb_info}')
+    # print(f'---')
     files = [open(name) for name in names]
 
     dist_mats = []
     for pid_file, name in zip(files, names):
         p_struct = parser.get_structure(pid_file, pid_file)
         s = ''
+
+        pdb_info = MMCIF2Dict(names[1])
+        peptides = []
+        for pep_id in pdb_info['_entity_poly.entity_id']:
+            id = int(pep_id) - 1
+            type = pdb_info['_entity_poly.type'][id]
+            print(f"type: {type}")
+            chain_letter = pdb_info['_struct_ref_seq.pdbx_strand_id'][id]
+            print(f"chain: {chain_letter}")
+            if type == 'polypeptide(L)':
+                print(f'**************************************************')
+                print(f'SLAYYYYY WE HAVE A POLYPEPTIDE!!!')
+                peptides.append(chain_letter)
+
+
+
         for record in SeqIO.parse(name, "cif-seqres"):
             print("Record id %s, chain %s" % (record.id, record.annotations["chain"]))
+
             # print(record.dbxrefs)
-            # print(record.seq)
+            print(record.seq)
             # Just for some data exploration!
             # print(dir(record))
             # print(f'dbxrefs: {record.dbxrefs}')
@@ -256,10 +301,18 @@ def get_structs(names, display_first=True):
 
             # print(f'sequence 2: {record.format("stockholm")}')
             # embl, stockholm,
-            if record.seq == 'XXXXXXXXXXXXXXXX':
-                print(f'NOT adding record: {record}')
-            else:
-                print(f'adding record!! {record}')
+
+
+            # if record.seq == 'XXXXXXXXXXXXXXXX':
+            #     print(f'NOT adding record: {record}')
+            # else:
+            #     print(f'adding record!! {record}')
+            #     s += record.seq
+
+
+            if record.annotations["chain"] in peptides:
+                print(f'adding to chain...')
+                print(record)
                 s += record.seq
 
             print()
@@ -281,7 +334,7 @@ def obtain_training():
     :return:
     """
     names = download_list()
-    dist_mat = get_structs(names[1:2])
+    dist_mat = get_structs(names[0:2])
     plt.show()
 
 
