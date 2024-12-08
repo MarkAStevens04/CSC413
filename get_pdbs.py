@@ -476,14 +476,14 @@ def get_structs(names, display_first=True):
 
             # print()
 
-        t = (*sequence_construction(p_struct, s), atom_interpreter(p_struct))
+        t = (name, *sequence_construction(p_struct, s), atom_interpreter(p_struct))
 
 
         # Error checking...
         # Fix these errors!!!!
         i = 0
         error = False
-        for s, o in zip(t[0], t[1]):
+        for s, o in zip(t[1], t[2]):
 
             # check if there's a mismatch...
             if s != '-' and o != '-' and s != o:
@@ -501,9 +501,9 @@ def get_structs(names, display_first=True):
             i += 1
 
         # Finally, check the length of the sequences
-        if len(t[0]) != len(t[1]):
-            print(f'length error! original: {len(t[0])}, new: {len(t[1])} {name}')
-            logger.warning(f'Length Error! original: {len(t[0])}, new: {len(t[1])} {name}')
+        if len(t[1]) != len(t[2]):
+            print(f'length error! original: {len(t[1])}, new: {len(t[2])} {name}')
+            logger.warning(f'Length Error! original: {len(t[1])}, new: {len(t[2])} {name}')
             error = True
 
         if not error:
