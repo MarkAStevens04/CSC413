@@ -15,6 +15,7 @@ import requests
 import logging
 import logging.handlers
 from Bio.SeqUtils import seq1
+import re
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -45,11 +46,12 @@ def download_list(max_download=30):
     names = open(PID_DIR, "r+").readline().split(',')
 
     using = []
-    for i in range(min(max_download, len(names))):
-        pdb_filename = pdb_list.retrieve_pdb_file(names[i], pdir=mmCIF_DIR, file_format="mmCif")
+    # for i in range(min(max_download, len(names))):
+        # pdb_filename = pdb_list.retrieve_pdb_file(names[i], pdir=mmCIF_DIR, file_format="mmCif")
+        # pdb_files = pdb_list.download_pdb_files(pdb_codes=names[:max_download], pdir=mmCIF_DIR, file_format="mmCif")
         # pdb_filename = pdb_list.retrieve_assembly_file(names[i], assembly_num = '1', pdir=mmCIF_DIR, file_format="mmCif")
         # pdb_filename = pdb_list.download_all_assemblies(names[i], pdir=mmCIF_DIR, file_format="mmCif")
-        using.append(names[i])
+        # using.append(names[i])
 
         # base_url = "https://files.rcsb.org/download/"
         # url = f"{base_url}{names[i].lower()}-assembly1.cif"
@@ -69,6 +71,8 @@ def download_list(max_download=30):
         #
         # using.append(names[i])
 
+    pdb_files = pdb_list.download_pdb_files(pdb_codes=names[:max_download], pdir=mmCIF_DIR, file_format="mmCif")
+    using.extend(names[:max_download])
 
     return using
 
@@ -298,7 +302,7 @@ def get_structs(names):
     :param names: List of 4-letter protein codes. Should be stores in mmCIF_DIR/CODE.cif
     :return: (4-Letter Code, Reference Sequence, Known Position Sequence, List of aminos with atom positions)
     """
-    names = [mmCIF_DIR + "/" + name + ".cif" for name in names]
+    names = [mmCIF_DIR + "/" + name + ".cif" for name in names if name != '']
     files = [open(name) for name in names]
 
     # Goal: Extract full protein sequence.
@@ -331,7 +335,6 @@ def get_structs(names):
     for pid_file, name in zip(files, names):
         # extract the mmCif dictionary to extract specific attributes
         pdb_info = MMCIF2Dict(name)
-        logger.curr_protein(name)
 
         print(f'()()()()()()()()()()()()()()()()()()()()()()()()()()()() {name}')
 
@@ -364,7 +367,12 @@ def get_structs(names):
                         # Add dashes if the polypeptide sequence is separated by non-proteins.
                         # Occurs when sequence is put between DNA sequences or other polypeptides.
                         ref_seq += '-' * (int(start_idx) - 1)
-                        ref_seq += pdb_info['_entity_poly.pdbx_seq_one_letter_code'][id].replace('\n', '')
+                        processed_seq = pdb_info['_entity_poly.pdbx_seq_one_letter_code'][id].replace('\n', '')
+                        print(f'pre-: {processed_seq}')
+                        processed_seq = re.sub(r'\(.*?\)', '-', processed_seq)
+                        print(f'post: {processed_seq}')
+                        # processed_seq = processed_seq.replace('(', '').replace(')', '')
+                        ref_seq += processed_seq
 
                         # The offset was to help fix the bug, but I cannot get it to work :(
                         # if int(start_idx) < 0:
@@ -392,28 +400,31 @@ def get_structs(names):
             # check if there's a mismatch...
             if s != '-' and o != '-' and s != o:
                 if not error:
-                    logger.warning(f'Invalid Protein!!! {name}')
-                    logger.info(f'mismatch: {s}{o} @ {i}')
+                    # logger.warning(f'Invalid Protein!!! {name}')
+                    logger.warning(f'mismatch: {s}{o} @ {i}')
                     # logger.debug(f'first mismatch: {s}{o} @ {i}')
                 error = True
 
             # check if we do NOT know the position in the original, but DO know the position
             # in the new one
             if s == '-' and o != '-':
-                logger.warning(f'Known position sequence not in reference sequence! {name}')
-                logger.info(f'reference: {s}, known-position: {o}')
+                if error:
+                    logger.warning(f'Known position sequence not in reference sequence! {name}')
+                    logger.warning(f'reference: {s}, known-position: {o}')
                 error = True
             i += 1
 
         # Finally, check the length of the sequences
         if len(ptein_entry[1]) != len(ptein_entry[2]):
             logger.warning(f'Length Error! Reference: {len(ptein_entry[1])}, known-position: {len(ptein_entry[2])} {name}')
-            logger.info(f'Reference: {ptein_entry[1]}')
-            logger.info(f'Known-pos: {ptein_entry[2]}')
+            logger.warning(f'Reference: {ptein_entry[1]}')
+            logger.warning(f'Known-pos: {ptein_entry[2]}')
             error = True
 
         if not error:
             sequences.append(ptein_entry)
+        else:
+            logger.error(f'Invalid Protein!! {name}')
     return sequences
 
 
@@ -437,4 +448,4 @@ if __name__ == '__main__':
 
 
     # Notable proteins:
-    # 6L6Y, 6JUX, 6KNM, 6JHD
+    # 6L6Y, 6JUX, 6KNM, 6JHD, 6WNX, 6XBJ, 6Z6U

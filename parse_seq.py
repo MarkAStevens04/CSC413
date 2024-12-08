@@ -33,20 +33,25 @@ class Sequence_Parser():
         self.e.use_ideal_aminos()
 
 
-    def parse_names(self):
+    def parse_names(self, aa_codes=None):
         """ Turns 4-letter protein codes into input & target data.
 
         Takes each protein code in self.aa_codes, interprets the data, and saves binary to directory in self.bin_dir
 
         For info on the format of these files, see process_aminos
 
+        :param aa_codes: Defaults to using self.aa_codes
         :rtype: None
         :return: None. Saves file to processed data directory
 
         """
         # Sequence info is [protein 1, protein 2, ...] where protein 1 = (4-letter protein code, reference protein sequence, defined_position protein sequence, list of atoms)
         # NOTE: Length of self.aa_codes may NOT equal length of sequence info. Some proteins are culled.
-        sequence_info = get_pdbs.get_structs(self.aa_codes)
+        # Default to using our own codes, otherwise use codes provided.
+        if aa_codes is None:
+            sequence_info = get_pdbs.get_structs(self.aa_codes)
+        else:
+            sequence_info = get_pdbs.get_structs(aa_codes)
         logger.info(f'------------------------------------------------------------------------')
         logger.info(f'beginning protein processing!')
 
@@ -54,23 +59,27 @@ class Sequence_Parser():
             # n is (protein code, ref_sequence, position_defined sequence, [list of aminos])
 
             # n[0] is actually directory to mmCif file. We extract the last 4 characters before the extension.
-            self.code = n[0][-8:-4]
+            code = n[0][-8:-4]
             # Store the reference and positional sequences
-            self.ref_seq = n[1]
-            self.pos_seq = n[2]
+            ref_seq = n[1]
+            pos_seq = n[2]
 
             # Process our list of aminos
             # amino has format [amino position, amino 1-letter abbrev, (atom1), (atom2), (atom3), ...]
             # where (atom) = (atom type, [atom x, atom y, atom z])
-            logging.debug(f'Parsing {self.code}...')
-            given, target = self.process_aminos(n[3])
+            logging.debug(f'Parsing {code}...')
+            given, target = self.process_aminos(ref_seq, pos_seq, n[3])
 
-            np.save(f'{self.bin_dir}{self.code}-in', given)
-            np.save(f'{self.bin_dir}{self.code}-target', target)
-            logging.info(f'Successfully parsed {self.code}!')
+            # Check for our error signal
+            if given is None:
+                logging.error(f'Throwing away protein {code}')
+            else:
+                np.save(f'{self.bin_dir}{code}-in', given)
+                np.save(f'{self.bin_dir}{code}-target', target)
+                logging.info(f'Successfully parsed {code}!')
 
 
-    def process_aminos(self, amino_list) -> (np.array, np.array):
+    def process_aminos(self, ref_seq, pos_seq, amino_list) -> (np.array, np.array):
         """ Takes a list of atoms in amino acid and creates abbreviated numpy arrays.
 
         Processes a list of amino acids!
@@ -100,7 +109,7 @@ class Sequence_Parser():
         processed_given = []
         processed_target = []
         # for every letter in our sequence
-        for idx, a, s in zip(range(len(self.ref_seq)), self.pos_seq, self.ref_seq):
+        for idx, a, s in zip(range(len(ref_seq)), pos_seq, ref_seq):
 
             # Check whether this amino acid has a known position or not.
             if a != '-':
@@ -112,12 +121,15 @@ class Sequence_Parser():
                 # will slide through every atom. i will track the provided amino, j will track the standard amino.
                 i = 0
                 j = 0
+
+                # Check if the current amino acid abbreviation is valid. If not, throw error!
+                if a not in self.e.aminos:
+                    logger.warning(f"Invalid amino name! '{a}'")
+                    return None, None
+
                 # Want to search through every possible atom in the amino acid.
                 # Only possible for current amino to be shorter. In this case, we
                 # substitute unknown atoms with that flag.
-                if a not in self.e.aminos:
-                    logger.warning(f'Invalid amino name! {a}')
-                    return [], []
 
                 # while we have not searched through every atom in the standard amino acid...
                 while j < len(self.e.aminos[a]):
@@ -182,6 +194,13 @@ class Sequence_Parser():
                 # We know the amino does NOT have any defined position!
                 # But it is a valid amino in our sequence
                 j = 0
+
+                # Check if the reference sequence has a known position
+                if s not in self.e.aminos:
+                    logger.warning(f'Invalid amino name! {a}')
+                    return None, None
+
+
                 while j < len(self.e.aminos[s]):
                     # We will iterate through each atom in our standard amino.
                     # Add each atom to both given and target lists, but with
@@ -203,6 +222,29 @@ class Sequence_Parser():
         output = np.array(processed_target, dtype='f')
 
         return input, output
+
+
+
+    def RAM_Efficient_parsing(self, batch_size=1000):
+        """
+        Parses params in batches. Slightly slower but much more RAM efficient.
+        Use if running into memory problems.
+        :param batch_size:
+        :return:
+        """
+        print(f'remainder: {len(self.aa_codes) % batch_size}')
+        print(f'adding: {(batch_size - (len(self.aa_codes) % batch_size)) % batch_size}')
+        to_split = self.aa_codes + [''] * ((batch_size - (len(self.aa_codes) % batch_size)) % batch_size)
+        to_split = np.array(to_split)
+        to_split = np.reshape(to_split, (-1, batch_size))
+        print(f'to split: {to_split}')
+        for names in to_split:
+            logger.info(f'------------------------ started parsing {names} ------------------------')
+            print(f'parsing: {names}')
+            self.parse_names(names)
+
+
+
 
     def open_struct(self, name):
         """ Opens structure with 4-letter protein code.
@@ -227,26 +269,6 @@ class Sequence_Parser():
 
 
 
-class ProteinErrorFilter(logging.Filter):
-    def __init__(self):
-        super().__init__()
-        self.proteins = dict()
-        self.curr_protein = None
-
-    def curr_protein(self, protein_name):
-        if protein_name not in self.proteins:
-            self.proteins[protein_name] = 0
-        self.curr_protein = protein_name
-
-    def filter(self, record):
-        if self.curr_protein not in self.proteins:
-            return True
-        elif self.proteins[self.curr_protein] == 0:
-            return True
-        else:
-            return False
-
-
 
 
 if __name__ == '__main__':
@@ -259,21 +281,19 @@ if __name__ == '__main__':
     # Starts each call as a new log!
     file_handler.doRollover()
 
-    master_handler = logging.FileHandler('Logs/WARNINGS.log', mode='w')
-    master_handler.setLevel(logging.WARNING)
-
-    protein_filter = ProteinErrorFilter()
-    master_handler.addFilter(protein_filter)
+    master_handler = logging.FileHandler('Logs/ERRORS.log', mode='w')
+    master_handler.setLevel(logging.ERROR)
 
     logging.basicConfig(level=logging.DEBUG, handlers=[file_handler, master_handler],
                         format='%(levelname)-8s: %(asctime)-22s %(module)-20s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S | ')
 
     logger.info('Started!')
-    logger.warning(f'seeing if this is working', 3)
+    logger.warning(f'seeing if this is working')
     # ---------------------- End Logging Framework ----------------------
 
     print(f'parsing')
-    a = Sequence_Parser()
-    a.parse_names()
+    a = Sequence_Parser(max_samples=100)
+    # a.parse_names()
+    a.RAM_Efficient_parsing(batch_size=10)
     # a.open_struct('6L6Y')
