@@ -69,10 +69,11 @@ class AA_Expert():
                 print(f'len amino_atom_list: {len(amino_atom_list)}')
 
 
-
+            # Change name of the atom if it is part of the backbone
             for a, f in zip(amino_atom_list, amino_backbone_flags):
                 if f == 'Y':
-                    self.vocab.add(a + 'B')
+                    # self.vocab.add(a + 'B')
+                    self.vocab.add(a)
                 else:
                     self.vocab.add(a)
 
@@ -84,9 +85,15 @@ class AA_Expert():
 
         stoi = { ch:i for i,ch in enumerate(possible_atoms)}
         itos = { i:ch for i,ch in enumerate(possible_atoms)}
+        # print(f'stoi: {stoi}')
 
-        self.encode = lambda s: [stoi[c] for c in s]
-        self.decode = lambda l: ''.join([itos[i] for i in l])
+        # Encode stores names ('c', 'ca', 'n', etc...) as keys, indices as values
+        # Decode stores indices as keys, names as values
+        self.encode = stoi
+        self.decode = itos
+
+        # self.encode = lambda s: [stoi[c] for c in s]
+        # self.decode = lambda l: ''.join([itos[i] for i in l])
 
 
         for amino_abbrev in amino_all:
@@ -100,14 +107,18 @@ class AA_Expert():
 
 
             # Possibly change this in the future to only have NCC contain backbone flag!
+            # Build list of atoms for each amino
             for a, f, x, y, z in zip(amino_atom_list, amino_backbone_flags, amino_x, amino_y, amino_z):
 
                 if f == 'Y':
-                    atom_name = a + 'B'
+                    # atom_name = a + 'B'
+                    atom_name = a
                 else:
                     atom_name = a
 
-                entry = [[self.encode([atom_name])[0], float(x), float(y), float(z)]]
+                # entry = [[self.encode([atom_name])[0], float(x), float(y), float(z)]]
+                entry = [[self.encode[atom_name], float(x), float(y), float(z)]]
+
                 amino_list = np.append(amino_list, entry, axis=0)
 
             amino_list = np.delete(amino_list, 0, axis=0)

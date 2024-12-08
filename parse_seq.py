@@ -41,6 +41,8 @@ class Sequence_Parser():
         print(n[0])
         print(n[1])
         for a in n[2]:
+            # amino has format [amino position, amino 1-letter abbrev, (atom1), (atom2), (atom3), ...]
+            # where (atomN) = (atom type, [atom x, atom y, atom z])
             self.process_amino(a)
         print()
 
@@ -51,23 +53,105 @@ class Sequence_Parser():
         :return:
         """
         print(f'processing {amino}')
-        # print(f'expert: {self.e}')
-        # print(self.e.aminos)
-        # print(self.e.vocab)
 
-        # print(f'---')
-        # print(self.e.encode(['C']))
+        processed_given = []
+        processed_target = []
+        # for every letter in our sequence
         for a in self.pos_seq:
+            print()
+            print()
+            print()
+            print(f'new letter!!!')
+            atom_given = []
+            atom_target = []
             # just iterate through known amino atom positions...
             if a != '-':
-                print(f'should be same: {a, amino[1]}')
-                print(f'')
-                print(self.e.aminos[a])
-                print(self.e.vocab)
-                for atom in amino[2:]:
-                    print(f'atom name: {atom[0]}')
-                    print(f'encoding: {atom[0]}:{self.e.encode(atom[0])}')
-                pause
+
+                # print(f'should be same: {a, amino[1]}')
+                # print(f'')
+                # print(self.e.aminos[a])
+                # print(self.e.vocab)
+                # print(f'encode: {self.e.encode}')
+                # will slide through every atom.
+                i = 0
+                j = 0
+                end = False
+                # Want to search through every possible atom in the amino acid.
+                # Only possible for current amino to be shorter. In this case, we
+                # substitute unknown atoms with that flag.
+                # while i < len(amino) - 2 and j < len(self.e.aminos[a]):
+                while j < len(self.e.aminos[a]):
+                    # our given atom is the atom of the expert, alongside the name of the residue.
+                    aa_atom = self.e.aminos[a][j]
+                    # Second line converts our letter for amino acid into an inde
+                    atom_given = [*aa_atom, a]
+                    # atom_given = [*aa_atom, ord(a.lower()) - 97]
+                    if i + 2 >= len(amino):
+                        # We know we have searched through every known atom!
+                        # Append the atom to the lists still, but with undefined positions.
+
+                        # target atom has unknown position
+                        atom_target = [aa_atom[0], -1, -1, -1, 0]
+                        processed_given.append(atom_given)
+                        processed_target.append(atom_target)
+                        j += 1
+                    else:
+                        # We will search through the current atom
+                        curr_atom = amino[i + 2]
+                        print(f'curr atom name: {curr_atom[0]}')
+                        print(f'encoding: {curr_atom[0]}:{self.e.encode[curr_atom[0]]}')
+                        curr_atom_label = self.e.encode[curr_atom[0]]
+                        # match = aa_atom[0] == curr_atom_label
+                        # print(f'match? amino atom: {aa_atom[0]}, {curr_atom_label}')
+
+                        # Check if the current atom is the same as the supposed amino atom
+                        if int(aa_atom[0]) == curr_atom_label:
+                            print(f'slay we have a match')
+                            # our target has a known position equal to its given position
+                            atom_target = [aa_atom[0], *curr_atom[1], 1]
+                            processed_given.append(atom_given)
+                            processed_target.append(atom_target)
+
+
+                            i += 1
+                            j += 1
+                        elif curr_atom[0] not in self.e.encode:
+                            # if the current atom does not exist in our encoding...
+                            # we know it is a nonstandard atom, and we do NOT add it to our list!
+                            print(f'nonstandard atom...')
+                            # Do not add to target amino!
+                            print(f'atom {curr_atom[0]}')
+                            i += 1
+                        else:
+                            # if there's no match, we will continue scanning in the amino acid.
+                            # Mark that the position is undefined.
+                            print(f'no match :( {aa_atom[0]}, {curr_atom_label}')
+                            # target atom has unknown position
+                            atom_target = [aa_atom[0], -1, -1, -1, 0]
+                            processed_given.append(atom_given)
+                            processed_target.append(atom_target)
+                            j += 1
+
+                # print()
+                # print(f'target:')
+                # for l in processed_target:
+                #     print(l)
+
+                    # i += 1
+                    # j += 1
+                # for atom in amino[2:]:
+            else:
+                # Still want to produce everything we have!
+                print(f'not processing this yet...')
+
+            # processed_given.append(atom_given)
+            # processed_target.append(atom_target)
+
+        print(f'finished!')
+        pause
+
+
+
 
 
 
