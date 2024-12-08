@@ -196,5 +196,5 @@ if __name__ == "__main__":
 
 
     # names = gp.download_list()
-    # dist_mat = gp.get_structs(names[0:1])
+    # dist_mat = gp.parse_names(names[0:1])
     # plt.show()

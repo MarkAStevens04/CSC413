@@ -545,7 +545,7 @@ def obtain_training():
 if __name__ == '__main__':
     obtain_training()
     # names = download_list()
-    # dist_mat = get_structs(names[0:1])
+    # dist_mat = parse_names(names[0:1])
     # plt.show()
 
 
