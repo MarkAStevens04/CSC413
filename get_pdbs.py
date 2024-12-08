@@ -110,8 +110,14 @@ def calc_dist_mat(p_struct):
     return distance_matrix
 
 
-def sequence_construction(p_struct: PDB.Structure.Structure, seq):
-    """
+def sequence_construction(p_struct: PDB.Structure.Structure, seq, offset=0):
+    """ Align protein sequences of known vs unknown residue positions, extract atom positions
+
+    Aligns seq with the sequence found in p_struct.
+    In the process, extracts atomic coordinates.
+    Difficult because p_struct may have multiple (overlapping) chains
+
+
     Outputs the original sequence alongside the position sequence.
     Used to determine which amino acids we know the position of, and which we do not.
     = Future optimization: =
@@ -123,13 +129,15 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     """
     ppb = PPBuilder()
     print(f'seq: {seq}')
-    output_str = ''
+    output_str = '-' * offset
+    print(f'starting output: {output_str}')
     prev_idx = 0
 
     atom_list = []
 
     for pp in ppb.build_peptides(p_struct):
         start_idx = pp[0].id[1] - 1
+        print(f'pp seq: {pp.get_sequence()}')
 
         # cut off extra letters!
         # Happens when proteins are defined twice.
@@ -159,14 +167,17 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
 
     # Repeat again at the end in case our protein ends with an unknown
     start_idx = len(seq)
-    output_str += '-' * (start_idx - prev_idx)
-
+    print(f'prev idx: {prev_idx}')
+    output_str += '-' * (start_idx - prev_idx - offset)
+    # output_str += '-' * (start_idx - prev_idx)
 
     print(f'out: {output_str}')
     return seq, output_str, atom_list
 
 def atom_interpreter(p_struct: PDB.Structure.Structure, pos_seq):
-    """
+    """ NOT USED
+
+    NOT USED
     Returns the positions of all known atoms!
     Takes pos_seq so we know which residues to pull atomic coords from.
     :param p_struct:
@@ -263,10 +274,19 @@ def polypeptide_interpreter(p_struct: PDB.Structure.Structure, seq):
 
 
 
-def get_structs(names, display_first=True):
-    """
-    Gets the structures from the names list.
-    Should be stored in the mmCIF_DIR
+def get_structs(names):
+    """ Get sequences and atom positions from protein code.
+
+    Goal: Extract full protein sequence.
+    Requires: Extracting only proteins (not DNA or other ligands) (surprisingly difficult)
+    Requires: Extracting full protein sequence (not just atoms with known positions) (surprisingly difficult!!)
+    Requires: Cross-referencing with cif parser to obtain final sequence
+    Requires: Aligning sequences of aminos with known vs unknown positions
+
+    First obtains the "reference" sequence of the protein by looking at mmCif file.
+    Then extracts the "known position" sequence of the protein by comparing the peptide list with the reference sequence.
+    Performs a pseudo sequence alignment using the position of each amino acid.
+
 
     = Possible extensions =
     - allow for input of different annotations. "artifact", mutation, etc.
@@ -278,82 +298,17 @@ def get_structs(names, display_first=True):
             - *** Predict what type of method will be best? (_exptl.method) '_exptl.method'
     - Maybe have our output also include molecule details like heteroatom, binding, etc.
 
-    :param names:
-    :return:
+    :param names: List of 4-letter protein codes. Should be stores in mmCIF_DIR/CODE.cif
+    :return: (4-Letter Code, Reference Sequence, Known Position Sequence, List of aminos with atom positions)
     """
-
-    # gathers the PDB file for each pdb name in names
-    i = 0
-    # print(f'name: {names}')
     names = [mmCIF_DIR + "/" + name + ".cif" for name in names]
-    pdb_info = MMCIF2Dict(names[1])
-    print(f"_entity.id : {pdb_info['_entity.id']}")
-    print(f"_entity.type: {pdb_info['_entity.type']}")
-    print(f"_entity.src_method: {pdb_info['_entity.src_method']}")
-    print(f"_entity.pdbx_description: {pdb_info['_entity.pdbx_description']}")
-    print(f"_entity.pdbx_number_of_molecules: {pdb_info['_entity.pdbx_number_of_molecules']}")
-    print(f"_entity.details: {pdb_info['_entity.details']}")
-    print(f"_entity_poly.entity_id: {pdb_info['_entity_poly.entity_id']}")
-    print(f"_entity_poly.nstd_monomer: {pdb_info['_entity_poly.nstd_monomer']}")
-    print(f"_entity_poly.type: {pdb_info['_entity_poly.type']}")
-    print(f"_entity_poly.pdbx_seq_one_letter_code: {pdb_info['_entity_poly.pdbx_seq_one_letter_code']}")
-    print(f"_entity_poly.pdbx_seq_one_letter_code_can: {pdb_info['_entity_poly.pdbx_seq_one_letter_code_can']}")
-    print(f"_entity_poly.pdbx_strand_id: {pdb_info['_entity_poly.pdbx_strand_id']}")
-    print(f"_entity_poly.pdbx_target_identifier: {pdb_info['_entity_poly.pdbx_target_identifier']}")
-    print(f"_entity_poly_seq.entity_id: {pdb_info['_entity_poly_seq.entity_id']}")
-    print(f"_entity_poly_seq.num: {pdb_info['_entity_poly_seq.num']}")
-    print(f"_entity_poly_seq.mon_id: {pdb_info['_entity_poly_seq.mon_id']}")
-    print(f"_entity_poly_seq.hetero: {pdb_info['_entity_poly_seq.hetero']}")
-    print(f"_entity.details: {pdb_info['_entity.details']}")
-    print(f"_entity_poly.pdbx_target_identifier : {pdb_info['_entity_poly.pdbx_target_identifier']}")
-    print(f"_struct_ref.pdbx_seq_one_letter_code {pdb_info['_struct_ref.pdbx_seq_one_letter_code']}")
-    print(f"_struct_ref_seq.pdbx_strand_id: {pdb_info['_struct_ref_seq.pdbx_strand_id']}")
-    print(f"_struct_ref_seq.seq_align_beg: {pdb_info['_struct_ref_seq.seq_align_beg']}")
+    files = [open(name) for name in names]
 
-
-    print()
-
-    print(f"_entity_src_gen.entity_id: {pdb_info['_entity_src_gen.entity_id']}")
-    print(f"_entity_src_gen.pdbx_src_id: {pdb_info['_entity_src_gen.pdbx_src_id']}")
-    print(f"_entity.id : {pdb_info['_entity.id']}")
-    print(f"_entity_poly.type: {pdb_info['_entity_poly.type']}")
-    print(f"_entity_poly.pdbx_strand_id: {pdb_info['_entity_poly.pdbx_strand_id']}")
-    print(f"_struct_ref.pdbx_seq_one_letter_code {pdb_info['_struct_ref.pdbx_seq_one_letter_code']}")
-    print(f"_struct_ref_seq.pdbx_strand_id: {pdb_info['_struct_ref_seq.pdbx_strand_id']}")
-    print()
-    print(f"_pdbx_poly_seq_scheme.pdb_seq_num: {pdb_info['_pdbx_poly_seq_scheme.pdb_seq_num']}")
-    print(f"_pdbx_poly_seq_scheme.entity_id  : {pdb_info['_pdbx_poly_seq_scheme.entity_id']}")
-    print(f"_pdbx_poly_seq_scheme.asym_id    : {pdb_info['_pdbx_poly_seq_scheme.asym_id']}")
-
-
-    print()
-    print(f'sequence:')
-    for i_str in pdb_info['_entity_src_gen.entity_id']:
-        print(f'i id: {str(i_str)}')
-
-
-    ptein_peps = []
-    # for each peptide...
-    for pep_id in pdb_info['_entity_poly.entity_id']:
-        # extract the id
-        id = int(pep_id) - 1
-        type = pdb_info['_entity_poly.type'][id]
-        print(f"type: {type}")
-        chain_letter = pdb_info['_struct_ref_seq.pdbx_strand_id'][id]
-        print(f"chain: {chain_letter}")
-        if type == 'polypeptide(L)':
-            # we found a desirable polypeptide!
-            print(f'**************************************************')
-            print(f'SLAYYYYY WE HAVE A POLYPEPTIDE!!!')
-            for chain_id, start_idx in zip(pdb_info['_struct_ref_seq.pdbx_auth_seq_align_beg'], pdb_info['_struct_ref_seq.ref_id']):
-                if chain_id == str(id + 1):
-                    print(f'found our starting index!!')
-                    ptein_peps.append((chain_letter, start_idx))
-
-
-
-    # Goal: get the type of the polomer (protein, not DNA), then cross-reference with
-    # cif parser to get the final sequence.
+    # Goal: Extract full protein sequence.
+    # Requires: Extracting only proteins (not DNA or other ligands) (surprisingly difficult)
+    # Requires: Extracting full protein sequence (not just atoms with known positions) (surprisingly difficult!!)
+    # Requires: Cross-referencing with cif parser to obtain final sequence
+    # Requires: Aligning sequences of aminos with known vs unknown positions
 
     # to investigate:
     # _struct_ref.pdbx_seq_one_letter_code
@@ -362,17 +317,6 @@ def get_structs(names, display_first=True):
     # _struct_ref_seq.db_align_beg
     # _struct_ref_seq.pdbx_auth_seq_align_beg
     # _struct_ref_seq.ref_id
-
-    print(f"_struct_ref.pdbx_seq_one_letter_code: {pdb_info['_struct_ref.pdbx_seq_one_letter_code']}")
-    print(f"_struct_ref_seq.pdbx_strand_id: {pdb_info['_struct_ref_seq.pdbx_strand_id']}")
-    print(f"_struct_ref_seq.seq_align_beg: {pdb_info['_struct_ref_seq.seq_align_beg']}")
-    print(f"_struct_ref_seq.db_align_beg: {pdb_info['_struct_ref_seq.db_align_beg']}")
-    print(f"_struct_ref_seq.pdbx_auth_seq_align_beg: {pdb_info['_struct_ref_seq.pdbx_auth_seq_align_beg']}")
-    print(f"_struct_ref_seq.ref_id: {pdb_info['_struct_ref_seq.ref_id']}")
-    print(f"_struct_ref.pdbx_align_begin: {pdb_info['_struct_ref.pdbx_align_begin']}")
-    print(f"")
-    print(f"")
-    print(f"")
 
 
     # -------------------------- SOLUTION!!!!!! ------------------------------
@@ -384,149 +328,94 @@ def get_structs(names, display_first=True):
     # _pdbx_poly_seq_scheme.entity_id
     #
 
-    # for key in pdb_info:
-    #     print(f'key: {key}')
-    # print(f'pdb info: {pdb_info}')
-    # print(f'---')
-    files = [open(name) for name in names]
 
-    dist_mats = []
     sequences = []
+    # for every mmCif file and associated directory...
     for pid_file, name in zip(files, names):
-        p_struct = parser.get_structure(pid_file, pid_file)
-        s = ''
-
+        # extract the mmCif dictionary to extract specific attributes
         pdb_info = MMCIF2Dict(name)
-        # peptides = []
-        # for pep_id in pdb_info['_entity_poly.entity_id']:
-        #     id = int(pep_id) - 1
-        #     type = pdb_info['_entity_poly.type'][id]
-        #     # print(f"type: {type}")
-        #     chain_letter = pdb_info['_struct_ref_seq.pdbx_strand_id'][id]
-        #     # print(f"chain: {chain_letter}")
-        #     if type == 'polypeptide(L)':
-        #         # print(f'**************************************************')
-        #         # print(f'SLAYYYYY WE HAVE A POLYPEPTIDE!!!')
-        #         # print(f"start seq: {pdb_info['_struct_ref.pdbx_align_begin'][id]}")
-        #         s += '-' * (int(pdb_info['_struct_ref.pdbx_align_begin'][id]) - 1)
-        #         peptides.append(chain_letter)
-        #         s += pdb_info['_entity_poly.pdbx_seq_one_letter_code'][id].replace('\n', '')
-
-
         print(f'()()()()()()()()()()()()()()()()()()()()()()()()()()()() {name}')
 
         ptein_peps = []
-        # for each peptide...
+        ref_seq = ''
+        offset = 0
+        # for each peptide in _entity_poly.entity_id ...
+        # goal is to get the ACTUAL start position. Cannot access this info with regular methods
+        # because the residues are not populated in any objects because biopython does not recognize this sequence.
         for pep_id in pdb_info['_entity_poly.entity_id']:
-            # extract the id
             found = False
+
+            # id is that noted in the mmCif file - 1 (0-indexed vs 1-indexed)
             id = int(pep_id) - 1
             type = pdb_info['_entity_poly.type'][id]
+            print(f"_entity_poly.entity_id: {pdb_info['_entity_poly.entity_id']}")
             print(f"type: {type}")
-            chain_letter = pdb_info['_struct_ref_seq.pdbx_strand_id'][id]
-            print(f"chain: {chain_letter}")
             if type == 'polypeptide(L)':
-                # we found a desirable polypeptide!
-                # print(f'**************************************************')
-                # print(f'SLAYYYYY WE HAVE A POLYPEPTIDE!!!')
+                # Only extract actual polypeptides!
+                # Cannot use name found from iterating over each chain, it says DNA & Proteins are both polypeptides (true but not helpful)
+
                 for chain_id, start_idx, chain_name in zip(pdb_info['_pdbx_poly_seq_scheme.entity_id'],
                                                pdb_info['_pdbx_poly_seq_scheme.pdb_seq_num'],
                                                pdb_info['_pdbx_poly_seq_scheme.asym_id']):
                     if chain_id == str(id + 1) and not found:
-                        # print(f'found our starting index!!')
+                        # If the chain id hasn't been located yet...
+                        # ptein_peps is technically not required, but extremely useful for debugging.
+                        # Denotes the start location of each peptide sequence.
                         ptein_peps.append((chain_name, start_idx))
                         found = True
-                        s += '-' * (int(start_idx) - 1)
-                        s += pdb_info['_entity_poly.pdbx_seq_one_letter_code'][id].replace('\n', '')
+                        # Add dashes if the polypeptide sequence is separated by non-proteins.
+                        # Occurs when sequence is put between DNA sequences or other polypeptides.
+                        ref_seq += '-' * (int(start_idx) - 1)
+                        ref_seq += pdb_info['_entity_poly.pdbx_seq_one_letter_code'][id].replace('\n', '')
+
+                        # The offset was to help fix the bug, but I cannot get it to work :(
+                        if int(start_idx) < 0:
+                            offset = max(-1 * (int(start_idx) - 1), offset)
+                            print(f'offset changed to: {offset}')
 
         print(f'ptein peps: {ptein_peps}')
         print(f'')
 
-        # for record in SeqIO.parse(name, "cif-seqres"):
-        # print(f'*** Records:')
-        # record_dict = SeqIO.to_dict(SeqIO.parse(name, "cif-seqres"))
-        # print(f'record dict: {record_dict}')
-        # for index, record in enumerate(SeqIO.parse(name, "cif-seqres")):
-        #     print(record)
+        # get the structure of the protein for extracting atom positions and known-position residue sequence
+        p_struct = parser.get_structure(pid_file, pid_file)
+        ref_seq, pos_seq, atom_list = sequence_construction(p_struct, ref_seq, offset)
 
-        # for record in SeqIO.parse(name, "cif-seqres"):
-
-
-            # print("Record id %s, chain %s" % (record.id, record.annotations["chain"]))
-            # print(f'record annotations: {record.annotations}')
-            # print(record.seq[0])
-
-            # print(record.dbxrefs)
-            # print(record.seq)
-            # Just for some data exploration!
-            # print(dir(record))
-            # print(f'dbxrefs: {record.dbxrefs}')
-            # print(f'sequence: {record.seq}')
-            # print(f'count: {record.count}')
-            # print(f'description: {record.description}')
-            # print(f'features: {record.features}')
-            # print(f'format: {record.format}')
-            # print(f'id: {record.id}')
-            # print(f'letter annotations: {record.letter_annotations}')
-            # print(f'name: {record.name}')
-
-            # print(f'sequence 2: {record.format("embl")}')
-            # embl, stockholm, fasta, fasta-2line
-            #
-            # working: clustal, embl, fasta, fasta-2line, gb, imgt, nexus, phylip, pir, tab
-            # helpful: clustal, ***embl***, fasta, imgt
-
-
-
-            # if record.seq == 'XXXXXXXXXXXXXXXX':
-            #     print(f'NOT adding record: {record}')
-            # else:
-            #     print(f'adding record!! {record}')
-            #     s += record.seq
-
-
-            # if record.annotations["chain"] in peptides:
-            #     print(f'adding to chain...')
-            #     print(record)
-            #     s += record.seq
-
-            # print()
-
-        ref_seq, pos_seq, atom_list = sequence_construction(p_struct, s)
-
-        # t = (name, ref_seq, pos_seq, atom_interpreter(p_struct, pos_seq))
-        t = (name, ref_seq, pos_seq, atom_list)
+        # entry to our list of proteins
+        ptein_entry = (name, ref_seq, pos_seq, atom_list)
 
 
         # Error checking...
         # Fix these errors!!!!
+        # Count the number of error messages we send
         i = 0
         error = False
-        for s, o in zip(t[1], t[2]):
-
+        # For each letter in the code...
+        for s, o in zip(ptein_entry[1], ptein_entry[2]):
             # check if there's a mismatch...
             if s != '-' and o != '-' and s != o:
                 if not error:
                     logger.warning(f'Invalid Protein!!! {name}')
+                    logger.info(f'mismatch {error}: {s}{o} @ {i}')
                     # logger.debug(f'first mismatch: {s}{o} @ {i}')
                 error = True
 
             # check if we do NOT know the position in the original, but DO know the position
             # in the new one
             if s == '-' and o != '-':
-                logger.warning(f'Sequence known not in original! {name}')
-                # logger.debug(f'{s}{o} @ {i}')
+                logger.warning(f'Known position sequence not in reference sequence! {name}')
+                logger.info(f'reference: {s}, known-position: {o}')
                 error = True
             i += 1
 
         # Finally, check the length of the sequences
-        if len(t[1]) != len(t[2]):
-            print(f'length error! original: {len(t[1])}, new: {len(t[2])} {name}')
-            logger.warning(f'Length Error! original: {len(t[1])}, new: {len(t[2])} {name}')
+        if len(ptein_entry[1]) != len(ptein_entry[2]):
+            logger.warning(f'Length Error! Reference: {len(ptein_entry[1])}, known-position: {len(ptein_entry[2])} {name}')
+            logger.info(f'Reference: {ptein_entry[1]}')
+            logger.info(f'Known-pos: {ptein_entry[2]}')
             error = True
 
         if not error:
-            sequences.append(t)
+            sequences.append(ptein_entry)
     return sequences
 
 
@@ -550,4 +439,4 @@ if __name__ == '__main__':
 
 
     # Notable proteins:
-    # 6L6Y, 6JUX
+    # 6L6Y, 6JUX, 6KNM

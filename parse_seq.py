@@ -14,7 +14,7 @@ class Sequence_Parser():
     """
     Class for parsing protein sequences and cleaning up data
     """
-    def __init__(self, max_samples=2):
+    def __init__(self, max_samples=10):
         """ Initializes our sequence parser.
 
         This is the main source of modifying constants.
@@ -45,7 +45,10 @@ class Sequence_Parser():
 
         """
         # Sequence info is [protein 1, protein 2, ...] where protein 1 = (4-letter protein code, reference protein sequence, defined_position protein sequence, list of atoms)
+        # NOTE: Length of self.aa_codes may NOT equal length of sequence info. Some proteins are culled.
         sequence_info = get_pdbs.get_structs(self.aa_codes)
+        logger.info(f'------------------------------------------------------------------------')
+        logger.info(f'beginning protein processing!')
 
         for n in sequence_info:
             # n is (protein code, ref_sequence, position_defined sequence, [list of aminos])
@@ -63,6 +66,7 @@ class Sequence_Parser():
 
             np.save(f'{self.bin_dir}{self.code}-in', given)
             np.save(f'{self.bin_dir}{self.code}-target', target)
+            logging.info(f'Successfully parsed {self.code}!')
 
 
     def process_aminos(self, amino_list) -> (np.array, np.array):
