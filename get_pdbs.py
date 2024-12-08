@@ -12,6 +12,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import requests
+import logging
+import logging.handlers
+from Bio.SeqUtils import seq1
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 import amino_expert as aa
@@ -33,13 +39,36 @@ def download_list(max_download=30):
     """
     # each entry is roughly 1MB (Downloading 1,000 PDB would be roughly 1GB)
     pdb_list = PDBList(server="https://files.wwpdb.org/")
+    # pdb_list = PDBList(server="rsync://rsync.rcsb.org")
+
     # get all 4 letter codes of desired proteins
     names = open(PID_DIR, "r+").readline().split(',')
 
     using = []
     for i in range(min(max_download, len(names))):
         pdb_filename = pdb_list.retrieve_pdb_file(names[i], pdir=mmCIF_DIR, file_format="mmCif")
+        # pdb_filename = pdb_list.retrieve_assembly_file(names[i], assembly_num = '1', pdir=mmCIF_DIR, file_format="mmCif")
+        # pdb_filename = pdb_list.download_all_assemblies(names[i], pdir=mmCIF_DIR, file_format="mmCif")
         using.append(names[i])
+
+        # base_url = "https://files.rcsb.org/download/"
+        # url = f"{base_url}{names[i].lower()}-assembly1.cif"
+        #
+        # # File path to save the downloaded file
+        # file_path = f"{mmCIF_DIR}/{names[i].lower()}_assembly1.cif"
+        #
+        # # Download the file
+        # response = requests.get(url)
+        # if response.status_code == 200:
+        #     with open(file_path, "wb") as file:
+        #         file.write(response.content)
+        #     print(f"Downloaded biological assembly to {file_path}")
+        #     return file_path
+        # else:
+        #     raise Exception(f"Failed to download file. HTTP Status: {response.status_code}")
+        #
+        # using.append(names[i])
+
 
     return using
 
@@ -94,7 +123,7 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     """
     ppb = PPBuilder()
     print(f'seq: {seq}')
-    output_str = 'ppt: '
+    output_str = ''
     prev_idx = 0
 
     for pp in ppb.build_peptides(p_struct):
@@ -107,7 +136,7 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
         remove = max(prev_idx - start_idx, 0)
 
         output_str += '-' * (start_idx - prev_idx)
-        output_str += pp.get_sequence()[remove:]
+        output_str += str(pp.get_sequence()[remove:])
         # keep the highest from prev_idx and end of this string.
         # We already added elements up to prev_idx, we don't want to add them again
         # in a later string!
@@ -116,8 +145,54 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     # Repeat again at the end in case our protein ends with an unknown
     start_idx = len(seq)
     output_str += '-' * (start_idx - prev_idx)
-    print(output_str)
 
+
+    print(f'out: {output_str}')
+    return seq, output_str
+
+def atom_interpreter(p_struct: PDB.Structure.Structure):
+    """
+    Returns the positions of all known atoms
+    :param p_struct:
+    :return:
+    """
+    # # print(f'all residues: {p_struct.get_residues()}')
+    # atoms = []
+    # for r in p_struct.get_residues():
+    #     # print(f'residue: {r}')
+    #     res_position = r.id[1]
+    #     # print(f'res ---- {r}')
+    #     # for n in r.get_iterator():
+    #     #     print(n)
+    #
+    #     if r.is_disordered():
+    #         logger.warning(f'Non-standard residue! {p_struct}, {r}, {r.id}')
+    #     else:
+    #         a_sublist = [res_position, r.get_resname()]
+    #         for atom in r.get_unpacked_list():
+    #             # print(f'atom name: {atom}')
+    #             # print(f'atom: {atom.get_id()}, {atom.get_coord()}, {residue.id, }')
+    #             a = [atom.get_id(), atom.get_coord()]
+    #             a_sublist.append(a)
+    #         atoms.append(a_sublist)
+
+    atoms = []
+    for model in p_struct:  # Loop through models (may be multiple)
+        for chain in model:  # Loop through chains
+
+            for residue in chain:  # Loop through residues
+                # print(f'res ----- {residue}')
+                single_res = [residue.id[1], seq1(residue.get_resname())]
+                for atom in residue:  # Loop through atoms
+                    atom_name = atom.get_name()
+                    coords = atom.get_coord()  # Get atomic coordinates (x, y, z)
+                    a = [atom.get_id(), atom.get_coord(), atom.get_parent()]
+                    # print(f'a: {a}')
+                    single_res.append((atom_name, coords))
+                atoms.append(single_res)
+
+
+    return atoms
 
 
 
@@ -300,6 +375,7 @@ def get_structs(names, display_first=True):
     files = [open(name) for name in names]
 
     dist_mats = []
+    sequences = []
     for pid_file, name in zip(files, names):
         p_struct = parser.get_structure(pid_file, pid_file)
         s = ''
@@ -400,15 +476,39 @@ def get_structs(names, display_first=True):
 
             # print()
 
+        t = (*sequence_construction(p_struct, s), atom_interpreter(p_struct))
 
-        print(f'-----------')
-        polypeptides = sequence_construction(p_struct, s)
-        dist_mat = calc_dist_mat(p_struct)
-        dist_mats.append(dist_mat)
 
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(dist_mats[0], cmap="viridis", square=True, cbar_kws={'label': 'Distance (A)'})
-    plt.title(f'Contact Map / Distance matrix for {files[0].name}')
+        # Error checking...
+        # Fix these errors!!!!
+        i = 0
+        error = False
+        for s, o in zip(t[0], t[1]):
+
+            # check if there's a mismatch...
+            if s != '-' and o != '-' and s != o:
+                if not error:
+                    logger.warning(f'Invalid Protein!!! {name}')
+                    # logger.debug(f'first mismatch: {s}{o} @ {i}')
+                error = True
+
+            # check if we do NOT know the position in the original, but DO know the position
+            # in the new one
+            if s == '-' and o != '-':
+                logger.warning(f'Sequence known not in original! {name}')
+                # logger.debug(f'{s}{o} @ {i}')
+                error = True
+            i += 1
+
+        # Finally, check the length of the sequences
+        if len(t[0]) != len(t[1]):
+            print(f'length error! original: {len(t[0])}, new: {len(t[1])} {name}')
+            logger.warning(f'Length Error! original: {len(t[0])}, new: {len(t[1])} {name}')
+            error = True
+
+        if not error:
+            sequences.append(t)
+    return sequences
 
 
 def obtain_training():

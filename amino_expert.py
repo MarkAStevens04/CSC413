@@ -49,6 +49,8 @@ class AA_Expert():
             mmcif_dict = MMCIF2Dict(file) # Turn MMCIF into dictionary
             single_letter = mmcif_dict['_chem_comp.one_letter_code'][0]
             amino_atom_list = mmcif_dict['_chem_comp_atom.type_symbol']
+            amino_atom_list = mmcif_dict['_chem_comp_atom.atom_id']
+
             amino_backbone_flags = mmcif_dict['_chem_comp_atom.pdbx_backbone_atom_flag']
             amino_x  =mmcif_dict['_chem_comp_atom.pdbx_model_Cartn_x_ideal']
             amino_y = mmcif_dict['_chem_comp_atom.pdbx_model_Cartn_y_ideal']
