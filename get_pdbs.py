@@ -110,6 +110,7 @@ def calc_dist_mat(p_struct):
     return distance_matrix
 
 
+
 def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     """ Align protein sequences of known vs unknown residue positions, extract atom positions
 
@@ -130,7 +131,6 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     ppb = PPBuilder()
     print(f'seq: {seq}')
     output_str = ''
-    print(f'starting output: {output_str}')
     prev_idx = 0
 
     atom_list = []
@@ -166,7 +166,6 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
 
     # Repeat again at the end in case our protein ends with an unknown
     start_idx = len(seq)
-    print(f'prev idx: {prev_idx}')
     output_str += '-' * (start_idx - prev_idx)
 
     print(f'out: {output_str}')
@@ -332,6 +331,8 @@ def get_structs(names):
     for pid_file, name in zip(files, names):
         # extract the mmCif dictionary to extract specific attributes
         pdb_info = MMCIF2Dict(name)
+        logger.curr_protein(name)
+
         print(f'()()()()()()()()()()()()()()()()()()()()()()()()()()()() {name}')
 
         ptein_peps = []
@@ -436,4 +437,4 @@ if __name__ == '__main__':
 
 
     # Notable proteins:
-    # 6L6Y, 6JUX, 6KNM
+    # 6L6Y, 6JUX, 6KNM, 6JHD

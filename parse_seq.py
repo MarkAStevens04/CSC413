@@ -62,6 +62,7 @@ class Sequence_Parser():
             # Process our list of aminos
             # amino has format [amino position, amino 1-letter abbrev, (atom1), (atom2), (atom3), ...]
             # where (atom) = (atom type, [atom x, atom y, atom z])
+            logging.debug(f'Parsing {self.code}...')
             given, target = self.process_aminos(n[3])
 
             np.save(f'{self.bin_dir}{self.code}-in', given)
@@ -114,6 +115,9 @@ class Sequence_Parser():
                 # Want to search through every possible atom in the amino acid.
                 # Only possible for current amino to be shorter. In this case, we
                 # substitute unknown atoms with that flag.
+                if a not in self.e.aminos:
+                    logger.warning(f'Invalid amino name! {a}')
+                    return [], []
 
                 # while we have not searched through every atom in the standard amino acid...
                 while j < len(self.e.aminos[a]):
@@ -133,10 +137,17 @@ class Sequence_Parser():
                         # Check the current atom in our given amino. (i + 2 because first 2 indices store amino position and name, respectively)
                         # Curr atom has format (atom name string, [x, y, z])
                         curr_atom = amino[i + 2]
-                        curr_atom_label = self.e.encode[curr_atom[0]]
 
-                        # Check if the given atom is the same as the standard amino atom
-                        if int(aa_atom[0]) == curr_atom_label:
+                        if curr_atom[0] not in self.e.encode:
+                            # If the name of the current atom has never been seen in our standard aminos...
+                            # We know it is likely a nonstandard atom, and we will NOT add it to our list!
+
+                            logger.warning(f'nonstandard atom! {curr_atom[0]}, amino: {amino}')
+                            print(f'nonstandard atom! {curr_atom[0]}, amino: {amino}')
+                            # Do not add to target!
+                            i += 1
+                        elif int(aa_atom[0]) == self.e.encode[curr_atom[0]]:
+                            # Check if the given atom is the same as the standard amino atom
                             # Our current atom is the same as the standard amino atom!
                             # We slide our frame for both our given amino and standard amino.
 
@@ -148,14 +159,6 @@ class Sequence_Parser():
                             i += 1
                             j += 1
 
-                        elif curr_atom[0] not in self.e.encode:
-                            # If the name of the current atom has never been seen in our standard aminos...
-                            # We know it is likely a nonstandard atom, and we will NOT add it to our list!
-
-                            logger.warning(f'nonstandard atom! {curr_atom[0]}, amino: {amino}')
-                            print(f'nonstandard atom! {curr_atom[0]}, amino: {amino}')
-                            # Do not add to target!
-                            i += 1
                         else:
                             # We know that the current atom in given and current atom in the standard are not a match.
                             # We assume that given amino's atoms are a subset of the standard amino's atoms.
@@ -224,7 +227,24 @@ class Sequence_Parser():
 
 
 
+class ProteinErrorFilter(logging.Filter):
+    def __init__(self):
+        super().__init__()
+        self.proteins = dict()
+        self.curr_protein = None
 
+    def curr_protein(self, protein_name):
+        if protein_name not in self.proteins:
+            self.proteins[protein_name] = 0
+        self.curr_protein = protein_name
+
+    def filter(self, record):
+        if self.curr_protein not in self.proteins:
+            return True
+        elif self.proteins[self.curr_protein] == 0:
+            return True
+        else:
+            return False
 
 
 
@@ -242,11 +262,15 @@ if __name__ == '__main__':
     master_handler = logging.FileHandler('Logs/WARNINGS.log', mode='w')
     master_handler.setLevel(logging.WARNING)
 
+    protein_filter = ProteinErrorFilter()
+    master_handler.addFilter(protein_filter)
+
     logging.basicConfig(level=logging.DEBUG, handlers=[file_handler, master_handler],
                         format='%(levelname)-8s: %(asctime)-22s %(module)-20s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S | ')
 
     logger.info('Started!')
+    logger.warning(f'seeing if this is working', 3)
     # ---------------------- End Logging Framework ----------------------
 
     print(f'parsing')
