@@ -14,7 +14,7 @@ class Sequence_Parser():
     """
     Class for parsing protein sequences and cleaning up data
     """
-    def __init__(self, max_samples=10):
+    def __init__(self, max_samples=100):
         """ Initializes our sequence parser.
 
         This is the main source of modifying constants.
@@ -239,7 +239,10 @@ if __name__ == '__main__':
     # Starts each call as a new log!
     file_handler.doRollover()
 
-    logging.basicConfig(level=logging.DEBUG, handlers=[file_handler],
+    master_handler = logging.FileHandler('Logs/WARNINGS.log', mode='w')
+    master_handler.setLevel(logging.WARNING)
+
+    logging.basicConfig(level=logging.DEBUG, handlers=[file_handler, master_handler],
                         format='%(levelname)-8s: %(asctime)-22s %(module)-20s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S | ')
 

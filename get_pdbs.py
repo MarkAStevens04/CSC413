@@ -110,7 +110,7 @@ def calc_dist_mat(p_struct):
     return distance_matrix
 
 
-def sequence_construction(p_struct: PDB.Structure.Structure, seq, offset=0):
+def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     """ Align protein sequences of known vs unknown residue positions, extract atom positions
 
     Aligns seq with the sequence found in p_struct.
@@ -129,7 +129,7 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq, offset=0):
     """
     ppb = PPBuilder()
     print(f'seq: {seq}')
-    output_str = '-' * offset
+    output_str = ''
     print(f'starting output: {output_str}')
     prev_idx = 0
 
@@ -137,7 +137,6 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq, offset=0):
 
     for pp in ppb.build_peptides(p_struct):
         start_idx = pp[0].id[1] - 1
-        print(f'pp seq: {pp.get_sequence()}')
 
         # cut off extra letters!
         # Happens when proteins are defined twice.
@@ -168,8 +167,7 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq, offset=0):
     # Repeat again at the end in case our protein ends with an unknown
     start_idx = len(seq)
     print(f'prev idx: {prev_idx}')
-    output_str += '-' * (start_idx - prev_idx - offset)
-    # output_str += '-' * (start_idx - prev_idx)
+    output_str += '-' * (start_idx - prev_idx)
 
     print(f'out: {output_str}')
     return seq, output_str, atom_list
@@ -338,7 +336,6 @@ def get_structs(names):
 
         ptein_peps = []
         ref_seq = ''
-        offset = 0
         # for each peptide in _entity_poly.entity_id ...
         # goal is to get the ACTUAL start position. Cannot access this info with regular methods
         # because the residues are not populated in any objects because biopython does not recognize this sequence.
@@ -348,8 +345,6 @@ def get_structs(names):
             # id is that noted in the mmCif file - 1 (0-indexed vs 1-indexed)
             id = int(pep_id) - 1
             type = pdb_info['_entity_poly.type'][id]
-            print(f"_entity_poly.entity_id: {pdb_info['_entity_poly.entity_id']}")
-            print(f"type: {type}")
             if type == 'polypeptide(L)':
                 # Only extract actual polypeptides!
                 # Cannot use name found from iterating over each chain, it says DNA & Proteins are both polypeptides (true but not helpful)
@@ -359,26 +354,28 @@ def get_structs(names):
                                                pdb_info['_pdbx_poly_seq_scheme.asym_id']):
                     if chain_id == str(id + 1) and not found:
                         # If the chain id hasn't been located yet...
+
                         # ptein_peps is technically not required, but extremely useful for debugging.
                         # Denotes the start location of each peptide sequence.
                         ptein_peps.append((chain_name, start_idx))
                         found = True
+
                         # Add dashes if the polypeptide sequence is separated by non-proteins.
                         # Occurs when sequence is put between DNA sequences or other polypeptides.
                         ref_seq += '-' * (int(start_idx) - 1)
                         ref_seq += pdb_info['_entity_poly.pdbx_seq_one_letter_code'][id].replace('\n', '')
 
                         # The offset was to help fix the bug, but I cannot get it to work :(
-                        if int(start_idx) < 0:
-                            offset = max(-1 * (int(start_idx) - 1), offset)
-                            print(f'offset changed to: {offset}')
+                        # if int(start_idx) < 0:
+                        #     offset = max(-1 * (int(start_idx) - 1), offset)
+                        #     print(f'offset changed to: {offset}')
 
         print(f'ptein peps: {ptein_peps}')
         print(f'')
 
         # get the structure of the protein for extracting atom positions and known-position residue sequence
         p_struct = parser.get_structure(pid_file, pid_file)
-        ref_seq, pos_seq, atom_list = sequence_construction(p_struct, ref_seq, offset)
+        ref_seq, pos_seq, atom_list = sequence_construction(p_struct, ref_seq)
 
         # entry to our list of proteins
         ptein_entry = (name, ref_seq, pos_seq, atom_list)
@@ -395,7 +392,7 @@ def get_structs(names):
             if s != '-' and o != '-' and s != o:
                 if not error:
                     logger.warning(f'Invalid Protein!!! {name}')
-                    logger.info(f'mismatch {error}: {s}{o} @ {i}')
+                    logger.info(f'mismatch: {s}{o} @ {i}')
                     # logger.debug(f'first mismatch: {s}{o} @ {i}')
                 error = True
 
