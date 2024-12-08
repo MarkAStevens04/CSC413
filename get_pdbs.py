@@ -172,7 +172,6 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     start_idx = len(seq)
     output_str += '-' * (start_idx - prev_idx)
 
-    print(f'out: {output_str}')
     return seq, output_str, atom_list
 
 def atom_interpreter(p_struct: PDB.Structure.Structure, pos_seq):
@@ -366,11 +365,13 @@ def get_structs(names):
 
                         # Add dashes if the polypeptide sequence is separated by non-proteins.
                         # Occurs when sequence is put between DNA sequences or other polypeptides.
-                        ref_seq += '-' * (int(start_idx) - 1)
+                        ref_seq += '-' * (int(start_idx) - 1 - len(ref_seq))
                         processed_seq = pdb_info['_entity_poly.pdbx_seq_one_letter_code'][id].replace('\n', '')
-                        print(f'pre-: {processed_seq}')
+                        # print(f'pre-: {processed_seq}')
+                        # Surprisingly large effect when removing (XXX) with -.
+                        # Roughly 29/100 -> 19/100
                         processed_seq = re.sub(r'\(.*?\)', '-', processed_seq)
-                        print(f'post: {processed_seq}')
+                        # print(f'post: {processed_seq}')
                         # processed_seq = processed_seq.replace('(', '').replace(')', '')
                         ref_seq += processed_seq
 
@@ -381,6 +382,12 @@ def get_structs(names):
 
         print(f'ptein peps: {ptein_peps}')
         print(f'')
+        # Essentially, if the beginning of the sequence is just filler (hence why its index is below 1), we cut it off!
+        # Surprisingly large effect on the data kept. Went from 31/100 gone to 19/100 gone
+        if int(ptein_peps[0][1]) <= 0:
+            # print(f'pre seq: {ref_seq}')
+            ref_seq = ref_seq[-1 * int(ptein_peps[0][1]) + 1:]
+            # print(f'postseq: {ref_seq}')
 
         # get the structure of the protein for extracting atom positions and known-position residue sequence
         p_struct = parser.get_structure(pid_file, pid_file)
