@@ -126,6 +126,8 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     output_str = ''
     prev_idx = 0
 
+    atom_list = []
+
     for pp in ppb.build_peptides(p_struct):
         start_idx = pp[0].id[1] - 1
 
@@ -137,6 +139,19 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
 
         output_str += '-' * (start_idx - prev_idx)
         output_str += str(pp.get_sequence()[remove:])
+
+
+        # populate our atom list with the new residues!
+        res_list = pp[remove:]
+        for res in res_list:
+            single_res = [res.id[1], seq1(res.get_resname())]
+            for atom in res:  # Loop through atoms
+                atom_name = atom.get_name()
+                coords = atom.get_coord()  # Get atomic coordinates (x, y, z)
+                # a = [atom.get_id(), atom.get_coord(), atom.get_parent()]
+                single_res.append((atom_name, coords))
+            atom_list.append(single_res)
+
         # keep the highest from prev_idx and end of this string.
         # We already added elements up to prev_idx, we don't want to add them again
         # in a later string!
@@ -148,11 +163,12 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
 
 
     print(f'out: {output_str}')
-    return seq, output_str
+    return seq, output_str, atom_list
 
-def atom_interpreter(p_struct: PDB.Structure.Structure):
+def atom_interpreter(p_struct: PDB.Structure.Structure, pos_seq):
     """
-    Returns the positions of all known atoms
+    Returns the positions of all known atoms!
+    Takes pos_seq so we know which residues to pull atomic coords from.
     :param p_struct:
     :return:
     """
@@ -476,7 +492,10 @@ def get_structs(names, display_first=True):
 
             # print()
 
-        t = (name, *sequence_construction(p_struct, s), atom_interpreter(p_struct))
+        ref_seq, pos_seq, atom_list = sequence_construction(p_struct, s)
+
+        # t = (name, ref_seq, pos_seq, atom_interpreter(p_struct, pos_seq))
+        t = (name, ref_seq, pos_seq, atom_list)
 
 
         # Error checking...
