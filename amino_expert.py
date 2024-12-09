@@ -184,7 +184,7 @@ parser = PDB.MMCIFParser(QUIET=True)
 
 if __name__ == "__main__":
 
-    # download_all_aminos()
+    download_all_aminos()
     e = AA_Expert()
     e.use_ideal_aminos()
     print(e.aminos)
@@ -195,6 +195,6 @@ if __name__ == "__main__":
 
 
 
-    # names = gp.download_list()
+    # names = gp.download_lls ist()
     # dist_mat = gp.parse_names(names[0:1])
     # plt.show()

@@ -176,6 +176,7 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     print(f'out: {output_str}')
     return seq, output_str, atom_list
 
+
 def atom_interpreter(p_struct: PDB.Structure.Structure, pos_seq):
     """ NOT USED
 
@@ -303,7 +304,7 @@ def get_structs(names):
     :param names: List of 4-letter protein codes. Should be stores in mmCIF_DIR/CODE.cif
     :return: (4-Letter Code, Reference Sequence, Known Position Sequence, List of aminos with atom positions)
     """
-    names = [mmCIF_DIR + "/" + name + ".cif" for name in names if name != '']
+    names = [mmCIF_DIR + "/" + name.lower() + ".cif" for name in names if name != '']
     files = [open(name) for name in names]
 
     # Goal: Extract full protein sequence.

@@ -162,3 +162,5 @@ cython_debug/
 PDBS/all
 PDBS/processed_data
 PDBs/full_formatted
+Logs/
+

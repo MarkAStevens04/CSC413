@@ -80,6 +80,7 @@ class Sequence_Parser():
                 if (len(new_ref) * 27) == target.shape[0]:
                     np.save(f'{self.bin_dir}{code}-in', new_ref)
                     np.save(f'{self.bin_dir}{code}-target', target)
+                    print(f'target: {target[54:150, :]}')
                     logging.info(f'Successfully parsed {code}!')
                 else:
                     logging.warning(f'len ref_seq * 27 != target.shape[0]! ')
@@ -116,10 +117,9 @@ class Sequence_Parser():
         x, y, and z are the known to be true positions of each atom. Our known_position flag is a 0 if the position is unknown, and x = y = z = -1, and x, y, and z take on the correct values if the flag is 1 (meaning the position is known).
 
         """
-        # print(f'aminos: {self.e.aminos}')
+        # Begin by extracting the largest number of atoms in an amino acid (we find its 27)
         lengths = [len(self.e.aminos[a]) for a in self.e.aminos]
         max_size = max(lengths)
-        # print(f'lengths: {lengths}, {max_size}')
 
 
         # aa_idx will track the current index of our amino acid
@@ -299,15 +299,17 @@ class Sequence_Parser():
 
         print(f'train: {given}')
         print()
-        print(f'target: {target}')
+        print(f'{target.shape()}')
+        print(f'target: {target[50:150, -5:]}')
         print()
         largest = 0
         smallest = 10000000000
-        for n in os.listdir('PDBs/processed_data'):
-            given = np.load(f'PDBs/processed_data/{n}', mmap_mode='r', allow_pickle=True)
-            largest = max(largest, given.shape[0])
-            smallest = min(smallest, given.shape[0])
-            print(f'{given.shape}, {smallest}, {largest}, {n}')
+
+        # for n in os.listdir('PDBs/processed_data'):
+        #     given = np.load(f'PDBs/processed_data/{n}', mmap_mode='r', allow_pickle=True)
+        #     largest = max(largest, given.shape[0])
+        #     smallest = min(smallest, given.shape[0])
+        #     print(f'{given.shape}, {smallest}, {largest}, {n}')
 
 
 
@@ -339,10 +341,10 @@ if __name__ == '__main__':
 
     print(f'parsing')
     start = time.time()
-    a = Sequence_Parser(max_samples=10)
-    # a.parse_names(['6VU4'])
+    a = Sequence_Parser(max_samples=1)
+    a.parse_names(['6XTB'])
     print(a.e.encode)
-    a.RAM_Efficient_parsing(batch_size=10)
-    # a.open_struct('6L6Y')
+    # a.RAM_Efficient_parsing(batch_size=10)
+    # a.open_struct('6XTB')
 
     logging.info(f'Took {time.time() - start} seconds!!!')
