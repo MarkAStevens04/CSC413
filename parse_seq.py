@@ -75,9 +75,22 @@ class Sequence_Parser():
             if given is None:
                 logging.error(f'Throwing away protein {code}')
             else:
-                np.save(f'{self.bin_dir}{code}-in', given)
-                np.save(f'{self.bin_dir}{code}-target', target)
-                logging.info(f'Successfully parsed {code}!')
+                new_ref = ref_seq.replace('-', '')
+                # Verify that our sequence length is what we expect
+                if (len(new_ref) * 27) == target.shape[0]:
+                    np.save(f'{self.bin_dir}{code}-in', new_ref)
+                    np.save(f'{self.bin_dir}{code}-target', target)
+                    logging.info(f'Successfully parsed {code}!')
+                else:
+                    logging.warning(f'len ref_seq * 27 != target.shape[0]! ')
+                    logging.warning(f'mismatch between actual & expected length')
+                    logging.error(f'Throwing away protein {code}')
+
+
+                # print(f"modi ref seq: {new_ref}")
+                # print(f"verify seque: {len(new_ref) * 27}, {target.shape[0]}")
+                # np.save(f'')
+
 
 
     def process_aminos(self, ref_seq, pos_seq, amino_list) -> (np.array, np.array):
@@ -228,11 +241,13 @@ class Sequence_Parser():
                     num_added += 1
                     j += 1
 
-            # Add blank atoms to make each amino produce the same number of atom output
-            while num_added < max_size:
-                processed_given.append([0, 0, 0, 0, 27])
-                processed_target.append([0, 0, 0, 0, 0, 0])
-                num_added += 1
+            if s != '-':
+                # Add blank atoms to make each amino produce the same number of atom output
+                # Only do this when the referenced sequence is not blank
+                while num_added < max_size:
+                    processed_given.append([0, 0, 0, 0, 27])
+                    processed_target.append([0, 0, 0, 0, 0, 0])
+                    num_added += 1
 
 
         # Turn our atom lists into numpy arrays.
