@@ -16,6 +16,7 @@ import logging
 import logging.handlers
 from Bio.SeqUtils import seq1
 import re
+from Bio.PDB.mmcifio import MMCIFIO
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -452,12 +453,37 @@ def obtain_training():
 
 
 
+def adjust_position(name):
+    """
+    Adjusts the position of some atoms in a mmCif file and saves the file!
+    :return:
+    """
+    n = mmCIF_DIR + "/" + name.lower() + ".cif"
+    file = open(n)
+    p_struct = parser.get_structure(name, file)
+    for model in p_struct:
+        for chain in model:
+            for residue in chain:
+                for atom in residue:
+                    # Example: Adjusting x, y, z coordinates
+                    x, y, z = atom.coord  # Get current coordinates
+                    atom.coord = [x + 1.0, y - 1.0, z + 2.0]  # Modify coordinates
+
+    io = MMCIFIO()
+    io.set_structure(p_struct)
+    io.save("output.cif")
+
+
+
+
 if __name__ == '__main__':
-    obtain_training()
+    # obtain_training()
     # names = download_list()
     # dist_mat = parse_names(names[0:1])
     # plt.show()
 
+
+    adjust_position('5RW2')
 
     # Notable proteins:
     # 6L6Y, 6JUX, 6KNM, 6JHD, 6WNX, 6XBJ, 6Z6U, 6PHN
