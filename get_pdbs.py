@@ -172,6 +172,8 @@ def sequence_construction(p_struct: PDB.Structure.Structure, seq):
     start_idx = len(seq)
     output_str += '-' * (start_idx - prev_idx)
 
+
+    print(f'out: {output_str}')
     return seq, output_str, atom_list
 
 def atom_interpreter(p_struct: PDB.Structure.Structure, pos_seq):
@@ -335,7 +337,9 @@ def get_structs(names):
         # extract the mmCif dictionary to extract specific attributes
         pdb_info = MMCIF2Dict(name)
 
-        print(f'()()()()()()()()()()()()()()()()()()()()()()()()()()()() {name}')
+        # print(f'()()()()()()()()()()()()()()()()()()()()()()()()()()()() {name}')
+        print()
+        print(f'{name}')
 
         ptein_peps = []
         ref_seq = ''
@@ -380,11 +384,11 @@ def get_structs(names):
                         #     offset = max(-1 * (int(start_idx) - 1), offset)
                         #     print(f'offset changed to: {offset}')
 
-        print(f'ptein peps: {ptein_peps}')
-        print(f'')
+        # print(f'ptein peps: {ptein_peps}')
+        # print(f'')
         # Essentially, if the beginning of the sequence is just filler (hence why its index is below 1), we cut it off!
         # Surprisingly large effect on the data kept. Went from 31/100 gone to 19/100 gone
-        if int(ptein_peps[0][1]) <= 0:
+        if len(ptein_peps) >= 1 and len(ptein_peps[0]) >= 2 and int(ptein_peps[0][1]) <= 0:
             # print(f'pre seq: {ref_seq}')
             ref_seq = ref_seq[-1 * int(ptein_peps[0][1]) + 1:]
             # print(f'postseq: {ref_seq}')
@@ -455,4 +459,4 @@ if __name__ == '__main__':
 
 
     # Notable proteins:
-    # 6L6Y, 6JUX, 6KNM, 6JHD, 6WNX, 6XBJ, 6Z6U
+    # 6L6Y, 6JUX, 6KNM, 6JHD, 6WNX, 6XBJ, 6Z6U, 6PHN

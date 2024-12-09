@@ -3,7 +3,8 @@ import logging
 import logging.handlers
 import amino_expert
 import numpy as np
-
+import time
+import os
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -102,6 +103,11 @@ class Sequence_Parser():
         x, y, and z are the known to be true positions of each atom. Our known_position flag is a 0 if the position is unknown, and x = y = z = -1, and x, y, and z take on the correct values if the flag is 1 (meaning the position is known).
 
         """
+        # print(f'aminos: {self.e.aminos}')
+        lengths = [len(self.e.aminos[a]) for a in self.e.aminos]
+        max_size = max(lengths)
+        # print(f'lengths: {lengths}, {max_size}')
+
 
         # aa_idx will track the current index of our amino acid
         aa_idx = 0
@@ -110,7 +116,7 @@ class Sequence_Parser():
         processed_target = []
         # for every letter in our sequence
         for idx, a, s in zip(range(len(ref_seq)), pos_seq, ref_seq):
-
+            num_added = 0
             # Check whether this amino acid has a known position or not.
             if a != '-':
                 # We know that this amino has a known position!
@@ -121,6 +127,7 @@ class Sequence_Parser():
                 # will slide through every atom. i will track the provided amino, j will track the standard amino.
                 i = 0
                 j = 0
+
 
                 # Check if the current amino acid abbreviation is valid. If not, throw error!
                 if a not in self.e.aminos:
@@ -134,6 +141,8 @@ class Sequence_Parser():
                 # while we have not searched through every atom in the standard amino acid...
                 while j < len(self.e.aminos[a]):
 
+                    # print(f'amino codes: {[ord(a.lower()) - 97 for a in self.e.aminos.keys()]}')
+
                     aa_atom = self.e.aminos[a][j]
                     # Second line converts our letter for amino acid into an index
                     # atom_given = [*aa_atom, a]
@@ -141,9 +150,10 @@ class Sequence_Parser():
                     if i + 2 >= len(amino):
                         # We know we have searched through every atom in the given amino!
                         # Still append the atom from standard amino to the target, but with undefined positions.
-                        atom_target = [aa_atom[0], -1, -1, -1, 0]
+                        atom_target = [aa_atom[0], -1, -1, -1, 0, 1]
                         processed_given.append(atom_given)
                         processed_target.append(atom_target)
+                        num_added += 1
                         j += 1
                     else:
                         # Check the current atom in our given amino. (i + 2 because first 2 indices store amino position and name, respectively)
@@ -164,9 +174,10 @@ class Sequence_Parser():
                             # We slide our frame for both our given amino and standard amino.
 
                             # Our target has a known position
-                            atom_target = [aa_atom[0], *curr_atom[1], 1]
+                            atom_target = [aa_atom[0], *curr_atom[1], 1, 1]
                             processed_given.append(atom_given)
                             processed_target.append(atom_target)
+                            num_added += 1
 
                             i += 1
                             j += 1
@@ -178,9 +189,10 @@ class Sequence_Parser():
                             # We add the atom to our target list with an undefined position.
                             # If there's no match, we will continue scanning in the amino acid.
 
-                            atom_target = [aa_atom[0], -1, -1, -1, 0]
+                            atom_target = [aa_atom[0], -1, -1, -1, 0, 1]
                             processed_given.append(atom_given)
                             processed_target.append(atom_target)
+                            num_added += 1
                             j += 1
 
                 # Error checking. Make sure every atom from our amino has been inserted.
@@ -209,17 +221,26 @@ class Sequence_Parser():
                     aa_atom = self.e.aminos[s][j]
 
                     atom_given = [*aa_atom, ord(s.lower()) - 97]
-                    atom_target = [aa_atom[0], -1, -1, -1, 0]
+                    atom_target = [aa_atom[0], -1, -1, -1, 0, 1]
 
                     processed_given.append(atom_given)
                     processed_target.append(atom_target)
+                    num_added += 1
                     j += 1
+
+            while num_added < max_size:
+                print(f'adding! {num_added}')
+                processed_given.append([0, 0, 0, 0, 27])
+                processed_target.append([0, 0, 0, 0, 0, 0])
+                num_added += 1
+
 
         # Turn our atom lists into numpy arrays.
         # This will allow us to store the binaries of the numpy arrays and access them via
         # memory mapping.
         input = np.array(processed_given, dtype='f')
         output = np.array(processed_target, dtype='f')
+
 
         return input, output
 
@@ -238,9 +259,10 @@ class Sequence_Parser():
         to_split = np.array(to_split)
         to_split = np.reshape(to_split, (-1, batch_size))
         print(f'to split: {to_split}')
-        for names in to_split:
+        for t, names in enumerate(to_split):
             logger.info(f'------------------------ started parsing {names} ------------------------')
-            print(f'parsing: {names}')
+            percent = (t / to_split.shape[0]) * 100
+            print(f'parsing: {names} {(round(percent, 1))}% there!!')
             self.parse_names(names)
 
 
@@ -264,6 +286,14 @@ class Sequence_Parser():
         print()
         print(f'target: {target}')
         print()
+        largest = 0
+        smallest = 10000000000
+        for n in os.listdir('PDBs/processed_data'):
+            given = np.load(f'PDBs/processed_data/{n}', mmap_mode='r', allow_pickle=True)
+            largest = max(largest, given.shape[0])
+            smallest = min(smallest, given.shape[0])
+            print(f'{given.shape}, {smallest}, {largest}, {n}')
+
 
 
 
@@ -293,7 +323,11 @@ if __name__ == '__main__':
     # ---------------------- End Logging Framework ----------------------
 
     print(f'parsing')
-    a = Sequence_Parser(max_samples=100)
-    # a.parse_names()
-    a.RAM_Efficient_parsing(batch_size=10)
+    start = time.time()
+    a = Sequence_Parser(max_samples=1000)
+    a.parse_names(['6VU4'])
+    print(a.e.encode)
+    # a.RAM_Efficient_parsing(batch_size=10)
     # a.open_struct('6L6Y')
+
+    logging.info(f'Took {time.time() - start} seconds!!!')
