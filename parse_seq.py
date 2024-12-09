@@ -228,8 +228,8 @@ class Sequence_Parser():
                     num_added += 1
                     j += 1
 
+            # Add blank atoms to make each amino produce the same number of atom output
             while num_added < max_size:
-                print(f'adding! {num_added}')
                 processed_given.append([0, 0, 0, 0, 27])
                 processed_target.append([0, 0, 0, 0, 0, 0])
                 num_added += 1
@@ -324,10 +324,10 @@ if __name__ == '__main__':
 
     print(f'parsing')
     start = time.time()
-    a = Sequence_Parser(max_samples=1000)
-    a.parse_names(['6VU4'])
+    a = Sequence_Parser(max_samples=10)
+    # a.parse_names(['6VU4'])
     print(a.e.encode)
-    # a.RAM_Efficient_parsing(batch_size=10)
+    a.RAM_Efficient_parsing(batch_size=10)
     # a.open_struct('6L6Y')
 
     logging.info(f'Took {time.time() - start} seconds!!!')
