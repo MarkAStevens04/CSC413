@@ -13,6 +13,9 @@ from torch.utils.data import DataLoader
 import torch
 # random.seed(777)
 
+esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
+esm_batch_converter = esm_alphabet.get_batch_converter()
+
 
 
 def one_hot_encode_column(array, column_index, num_classes):
@@ -97,10 +100,32 @@ class protein_unifier():
             self.out_file = np.vstack([self.out_file, protein])
 
 
+        # tokenize our sequence before saving!
+        seq = ''
+        p = 0
+        for s in sequence:
+            if s == 'b':
+                pass
+            elif s == 'e':
+                pass
+            elif s == 'p':
+                p += 1
+            else:
+                seq += s
+
+        seq = seq + '<pad>' * p
+
+        batch = [("protein", seq)]
+        _, _, tokens = esm_batch_converter(batch)
+        sequence = tokens[0, :].numpy()
+        # sequence = sequence.T
+
+
         if self.in_file is None:
             self.in_file = sequence
         else:
-            self.in_file = self.in_file + sequence
+            self.in_file = np.hstack([self.in_file, sequence])
+
 
         if self.out_file.shape[0] != len(self.in_file):
             print(f'input and output files are out of sync!')
@@ -110,14 +135,8 @@ class protein_unifier():
     def save(self, name):
         # Name should be XXX.bin
 
-        # convert to int array before saving...
-        self.new_in = np.ones((len(self.in_file), 1))
-        for i, a in enumerate(self.in_file):
-            n = ord(a)
-            # print(f'i: {n}')
-            self.new_in[i] = n
 
-        np.save(f'{self.save_path}in-{name}', allow_pickle=True, arr=self.new_in)
+        np.save(f'{self.save_path}in-{name}', allow_pickle=True, arr=self.in_file)
         np.save(f'{self.save_path}out-{name}', allow_pickle=True, arr=self.out_file)
 
     def __repr__(self):
@@ -392,12 +411,14 @@ def get_batch(seq, tar, block_size, batch_size, device):
             `x` - represents the input tokens, with shape (batch_size, block_size)
             `y` - represents the target output tokens, with shape (batch_size, block_size)
         """
+
     ix = torch.randint(seq.shape[0] - block_size, (batch_size,))
     x = torch.stack([torch.from_numpy((seq[i:i + block_size])) for i in ix])
     t = torch.stack([torch.from_numpy((tar[i:i + block_size, :])) for i in ix])
     # print(f'x batch shape: {x.shape}')
     # print(f't batch shape: {t.shape}')
-    if 'cuda' in device:
+
+    if device == 'cuda':
         # pin arrays x,t, which allows us to move them to GPU asynchronously
         #  (non_blocking=True)
         x, t = x.pin_memory().to(device, non_blocking=True), t.pin_memory().to(device, non_blocking=True)
@@ -415,11 +436,16 @@ def get_batch(seq, tar, block_size, batch_size, device):
 # Adjust your dataset so that it no longer pads/truncates sequences.
 # Return raw esm_emb and coords at their natural length.
 class ProteinStructureDataset(Dataset):
-    def __init__(self, pdb_dir, esm_model, esm_batch_converter):
+    def __init__(self, pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device):
         self.pdb_files = [f[:4] for f in os.listdir('PDBs/processed_data/train') if f.endswith('.npy') or f.endswith('.ent')]
         self.pdb_dir = pdb_dir
         self.esm_model = esm_model
         self.esm_batch_converter = esm_batch_converter
+        self.train_seq = train_seq
+        self.train_tar = train_tar
+        self.block_size = 100
+        self.batch_size = 10
+        self.device = device
 
     def __len__(self):
         return len(self.pdb_files)
@@ -427,26 +453,31 @@ class ProteinStructureDataset(Dataset):
     def __getitem__(self, idx):
         # print(f'getting item...')
         # print(f'code: {self.pdb_files[idx]}')
-        pdb_path = f'PDBs/processed_data/train/{self.pdb_files[idx]}'
+        # pdb_path = f'PDBs/processed_data/train/{self.pdb_files[idx]}'
+        #
+        #
+        # # pdb_path = os.path.join(self.pdb_dir, self.pdb_files[idx])
+        # seq, coords = self.get_sequence_and_coords(pdb_path)
+        # seq = str(seq)
+        #
+        # # Obtain ESM embeddings for the raw sequence length
+        # batch = [("protein", seq)]
+        # _, _, tokens = self.esm_batch_converter(batch)
+        # tokens = tokens.to(next(self.esm_model.parameters()).device)
+        # with torch.no_grad():
+        #     results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
+        # # Exclude CLS token
+        # esm_emb = results["representations"][self.esm_model.num_layers][0, 1:len(seq)+1, :]
+        # # print(f'esm_emb shape: {esm_emb.shape}')
+        # # print(f'coords shape: {coords.shape}')
+        #
+        # # No padding/truncation here. Just return raw.
 
 
-        # pdb_path = os.path.join(self.pdb_dir, self.pdb_files[idx])
-        seq, coords = self.get_sequence_and_coords(pdb_path)
-        seq = str(seq)
+        x, t = self.get_batch(self.train_seq, self.train_tar, self.block_size, self.batch_size, self.device)
+        x = self.to_embedding(x)
 
-        # Obtain ESM embeddings for the raw sequence length
-        batch = [("protein", seq)]
-        _, _, tokens = self.esm_batch_converter(batch)
-        tokens = tokens.to(next(self.esm_model.parameters()).device)
-        with torch.no_grad():
-            results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
-        # Exclude CLS token
-        esm_emb = results["representations"][self.esm_model.num_layers][0, 1:len(seq)+1, :]
-        # print(f'esm_emb shape: {esm_emb.shape}')
-        # print(f'coords shape: {coords.shape}')
-
-        # No padding/truncation here. Just return raw.
-        return esm_emb.cpu(), coords
+        return x, t
 
 
     def get_batch(self, seq, tar, block_size, batch_size, device):
@@ -470,7 +501,8 @@ class ProteinStructureDataset(Dataset):
         t = torch.stack([torch.from_numpy((tar[i:i + block_size, :])) for i in ix])
         # print(f'x batch shape: {x.shape}')
         # print(f't batch shape: {t.shape}')
-        if 'cuda' in device:
+        print(f'device: {device}')
+        if device == 'cuda':
             # pin arrays x,t, which allows us to move them to GPU asynchronously
             #  (non_blocking=True)
             x, t = x.pin_memory().to(device, non_blocking=True), t.pin_memory().to(device, non_blocking=True)
@@ -480,16 +512,24 @@ class ProteinStructureDataset(Dataset):
 
 
 
-    def to_embedding(self, ordinal_seq):
+    def to_embedding(self, tokens):
         """
-        Converts a batch of ordinals to a proper embedding!
+        Converts a batch of tokens to a proper embedding!
         # Input: (B, L, 1)
         # Output: (B, L, Embedding_size)
 
         :param indices:
         :return:
         """
-        pass
+
+        tokens = tokens.to(next(self.esm_model.parameters()).device)
+        with torch.no_grad():
+            results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
+        esm_emb = results["representations"][self.esm_model.num_layers]
+        print(f'embedding shape: {esm_emb.shape}')
+        return esm_emb
+
+
 
     def get_sequence_and_coords(self, pdb_path):
         # Extract raw sequence and coords
@@ -798,8 +838,8 @@ if __name__ == "__main__":
     # # output_len = 27 * (90) (there are 27 atoms which we stack into a single row)
     output_len = 2430
 
-
-
+    train_seq = np.load('PDBs/big_data/in-train.npy', mmap_mode='r', allow_pickle=True)
+    train_tar = np.load('PDBs/big_data/out-train.npy', mmap_mode='r', allow_pickle=True)
 
     esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
     esm_batch_converter = esm_alphabet.get_batch_converter()
@@ -808,64 +848,46 @@ if __name__ == "__main__":
     esm_model = esm_model.to(device)
 
     pdb_dir = "path_to_pdbs"
-    dataset = ProteinStructureDataset(pdb_dir, esm_model, esm_batch_converter)
+    dataset = ProteinStructureDataset(pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device)
     model = ProteinStructurePredictor(embed_dim=esm_model.embed_dim, depth=4, num_heads=8, mlp_ratio=4.0)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     criterion = RMSDLoss()
 
-    seq = 'ATGATTTCA'
-    batch = [("protein", seq)]
-
-    _, _, tokens = esm_batch_converter(batch)
-    tokens = tokens.to(next(esm_model.parameters()).device)
-
-    with torch.no_grad():
-        results = esm_model(tokens, repr_layers=[esm_model.num_layers])
-    # Exclude CLS token
-    esm_emb_a = results["representations"][esm_model.num_layers][0, 1:len(seq) + 1, :]
-
-
-    seq = 'AFLAAAYGA'
-    batch = [("protein", seq)]
-
-    _, _, tokens = esm_batch_converter(batch)
-    tokens = tokens.to(next(esm_model.parameters()).device)
-
-    with torch.no_grad():
-        results = esm_model(tokens, repr_layers=[esm_model.num_layers])
-    # Exclude CLS token
-    esm_emb_b = results["representations"][esm_model.num_layers][0, 1:len(seq) + 1, :]
-    print()
-    print(f"Embedding: {esm_emb_a[1, :6]}")
-    print(f"Embedding: {esm_emb_b[1, :6]}")
-    print()
-    print(f"Embedding: {esm_emb_a[2, :6]}")
-    print(f"Embedding: {esm_emb_b[2, :6]}")
-    print()
-    print(f"Embedding: {esm_emb_a[3, :6]}")
-    print(f"Embedding: {esm_emb_b[3, :6]}")
-    print()
-    print(f"Embedding: {esm_emb_a[8, :6]}")
-    print(f"Embedding: {esm_emb_b[8, :6]}")
-    print()
+    # # seq = 'N'
+    # seq = 'AFLAAAYGA'
+    # # AFLAAAYGA
+    # # tokens: tensor([[ 0,  5, 18,  4,  5,  5,  5, 19,  6,  5,  2]])
+    # # N
+    # # tokens: tokens: tensor([[ 0, 17,  2]])
+    #
+    # a = [ord(n) - 60 for n in seq]
+    # print(a)
+    #
+    # batch = [("protein", seq)]
+    # _, _, tokens = esm_batch_converter(batch)
+    # print(f'tokens: {tokens}')
+    #
+    # tokens = tokens.to(next(esm_model.parameters()).device)
+    # with torch.no_grad():
+    #     results = esm_model(tokens, repr_layers=[esm_model.num_layers])
+    # # Exclude CLS token
+    # esm_emb_b = results["representations"][esm_model.num_layers][0, 1:len(seq) + 1, :]
 
 
 
-
-
-    train_seq = np.load('PDBs/big_data/in-train.npy', mmap_mode='r', allow_pickle=True)
-    train_tar = np.load('PDBs/big_data/out-train.npy', mmap_mode='r', allow_pickle=True)
 
     # train_seq = np.memmap('PDBs/big_data/in-train.bin')
     # train_tar = np.memmap('PDBs/big_data/out-train.bin', shape=(-1, 2430))
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    print(f'seq shape: {train_seq.shape}')
-    print(f'tar shape: {train_tar.shape}')
-
-    get_batch(train_seq, train_tar, 100, 3, device)
+    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    #
+    # print(f'seq shape: {train_seq.shape}')
+    # print(f'tar shape: {train_tar.shape}')
+    #
+    # x, t = get_batch(train_seq, train_tar, 100, 3, device)
+    #
+    # dataset.to_embedding(x)
 
     print(f'cuda available? {torch.cuda.is_available()}')
     print(f'torch version: {torch.version.cuda}')
