@@ -25,7 +25,7 @@ class Sequence_Parser():
         :param max_samples: Maximum number of proteins to parse
         """
         # Directory where we store our processed data binaries
-        self.bin_dir = 'PDBs/processed_data/'
+        self.bin_dir = 'PDBs/pre_processed_data/'
 
         self.aa_codes = get_pdbs.download_list(max_download=max_samples)
 
@@ -305,8 +305,8 @@ class Sequence_Parser():
         largest = 0
         smallest = 10000000000
 
-        # for n in os.listdir('PDBs/processed_data'):
-        #     given = np.load(f'PDBs/processed_data/{n}', mmap_mode='r', allow_pickle=True)
+        # for n in os.listdir('PDBs/pre_processed_data'):
+        #     given = np.load(f'PDBs/pre_processed_data/{n}', mmap_mode='r', allow_pickle=True)
         #     largest = max(largest, given.shape[0])
         #     smallest = min(smallest, given.shape[0])
         #     print(f'{given.shape}, {smallest}, {largest}, {n}')
@@ -347,4 +347,5 @@ if __name__ == '__main__':
     a.RAM_Efficient_parsing(batch_size=10)
     # a.open_struct('6XTB')
 
-    logging.info(f'Took {time.time() - start} seconds!!!')
+    # logging.info(f'Took {time.time() - start} seconds!!!')
+    logging.warning(f'Complete! Took {time.time() - start} seconds!!!')

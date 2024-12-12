@@ -4,3 +4,5 @@ matplotlib
 seaborn
 glob2
 requests
+esm
+fair-esm
