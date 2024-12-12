@@ -80,7 +80,7 @@ class Sequence_Parser():
                 if (len(new_ref) * 27) == target.shape[0]:
                     np.save(f'{self.bin_dir}{code}-in', new_ref)
                     np.save(f'{self.bin_dir}{code}-target', target)
-                    print(f'target: {target[54:150, :]}')
+                    # print(f'target: {target[54:150, :]}')
                     logging.info(f'Successfully parsed {code}!')
                 else:
                     logging.warning(f'len ref_seq * 27 != target.shape[0]! ')
@@ -341,10 +341,10 @@ if __name__ == '__main__':
 
     print(f'parsing')
     start = time.time()
-    a = Sequence_Parser(max_samples=1)
-    a.parse_names(['6XTB'])
+    a = Sequence_Parser(max_samples=100)
+    # a.parse_names(['6XTB'])
     print(a.e.encode)
-    # a.RAM_Efficient_parsing(batch_size=10)
+    a.RAM_Efficient_parsing(batch_size=10)
     # a.open_struct('6XTB')
 
     logging.info(f'Took {time.time() - start} seconds!!!')
