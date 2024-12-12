@@ -32,7 +32,7 @@ MANIFEST
 *.manifest
 *.spec
 
-# Installer logs
+# Installer Logs
 pip-log.txt
 pip-delete-this-directory.txt
 
@@ -160,3 +160,7 @@ cython_debug/
 #.idea/
 
 PDBS/all
+PDBS/processed_data
+PDBs/full_formatted
+Logs/
+
