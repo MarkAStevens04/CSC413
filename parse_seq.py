@@ -341,7 +341,7 @@ if __name__ == '__main__':
 
     print(f'parsing')
     start = time.time()
-    a = Sequence_Parser(max_samples=100)
+    a = Sequence_Parser(max_samples=10)
     # a.parse_names(['6XTB'])
     print(a.e.encode)
     a.RAM_Efficient_parsing(batch_size=10)

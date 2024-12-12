@@ -16,6 +16,8 @@ import torch
 esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
 esm_batch_converter = esm_alphabet.get_batch_converter()
 
+block_size = 300
+num_training = 0
 
 
 def one_hot_encode_column(array, column_index, num_classes):
@@ -134,6 +136,8 @@ class protein_unifier():
 
     def save(self, name):
         # Name should be XXX.bin
+        print(f'in: {self.in_file}')
+        print(f'out: {self.out_file[50, 85:90]}')
 
 
         np.save(f'{self.save_path}in-{name}', allow_pickle=True, arr=self.in_file)
@@ -155,23 +159,30 @@ def format_sample(target, pad=False):
     - PAD identifier is index 84
     Add as many rows as necessary to make PAD correct sizing.
     """
-    sequence_length = 540
+    sequence_length = block_size
 
 
     BOS_row = np.zeros(target.shape[1], dtype=int)
     EOS_row = np.zeros(target.shape[1], dtype=int)
     BOS_row[82] = 1
     EOS_row[83] = 1
+
+    if target.shape[0] > sequence_length:
+        print(f'uh oh! Possibly cutting off values')
+        print(f'target length: {target.shape[0]}')
+        print(f'max length: {sequence_length}')
+
+
     if target.shape[0] + 2 < sequence_length:
         PAD = np.zeros((sequence_length - target.shape[0] - 2, target.shape[1]))
         PAD[:, 84] = 1
         # t is our new target
         if pad:
-            t = np.vstack([BOS_row, target, EOS_row, PAD])
+            t = np.vstack([BOS_row, target[:sequence_length - 2], EOS_row, PAD])
         else:
-            t = np.vstack([target, PAD])
+            t = np.vstack([BOS_row, target[:sequence_length - 2], PAD, EOS_row])
     else:
-        t = np.vstack([target])
+        t = np.vstack([BOS_row, target[:sequence_length - 2], EOS_row])
 
     return t
 
@@ -205,7 +216,7 @@ def format_input(target, pad=False):
     Add as many rows as necessary to make PAD correct sizing.
     """
     # MUST BE MULTIPLE OF 27! Each amino produces 27 atoms
-    sequence_length = 540
+    sequence_length = block_size
     # smallest protein is 270, largest is 54102
     # smallest is protein 6VU4
 
@@ -216,16 +227,20 @@ def format_input(target, pad=False):
     PAD = 'p'
 
     target = str(target).upper()
+    if len(target) > sequence_length + 2:
+        print(f'UH OH!!! CUTTING OFF VALUES!')
+        print(f'len target: {len(target)}')
+        print(f'max size: {sequence_length}')
 
     if len(target) + 2 < sequence_length:
         padding = PAD * (sequence_length - len(target) - 2)
         # t is our new target
         if pad:
-            t = BOS + target + EOS + padding
+            t = BOS + target[:sequence_length - 2] + EOS + padding
         else:
-            t = BOS + target + EOS
+            t = BOS + target[:sequence_length - 2] + EOS
     else:
-        t = BOS + target + EOS
+        t = BOS + target[:sequence_length - 2] + EOS
 
 
     return t
@@ -264,19 +279,23 @@ def process_data():
         # process data
         onehot_target = one_hot_encode_column(target, 0, 85)
         onehot_target = normalize_target(onehot_target)
-        target = format_sample(onehot_target)
-
-        # save input-output pair
-        np.save(os.path.join(save_dir, 'train', f'{code}-sample.npy'), given)
-        np.save(os.path.join(save_dir, 'train', f'{code}-target.npy'), target)
-        # print(f'given shape: {len(str(given))}')
         # print(f'target shape: {onehot_target.shape}')
+        # target = format_sample(onehot_target)
+        #
+        #
+        # # save input-output pair
+        # np.save(os.path.join(save_dir, 'train', f'{code}-sample.npy'), given)
+        # np.save(os.path.join(save_dir, 'train', f'{code}-target.npy'), target)
+        # # print(f'given shape: {len(str(given))}')
+        # # print(f'target shape: {onehot_target.shape}')
         g = format_input(given, pad=True)
         t = stack_atoms(onehot_target)
         t = format_sample(t, pad=True)
         # print(f'given after formatting: {len(g)}')
         # print(f'target after formatting: {t.shape}')
         pu.add_protein(g, t)
+        global num_training
+        num_training += 1
     # print(pu)
     pu.save('train')
 
@@ -291,11 +310,11 @@ def process_data():
         # process data
         onehot_target = one_hot_encode_column(target, 0, 85)
         onehot_target = normalize_target(onehot_target)
-        target = format_sample(onehot_target)
-
-        # save input-output pair
-        np.save(os.path.join(save_dir, 'valid', f'{code}-sample.npy'), given)
-        np.save(os.path.join(save_dir, 'valid', f'{code}-target.npy'), target)
+        # target = format_sample(onehot_target)
+        #
+        # # save input-output pair
+        # np.save(os.path.join(save_dir, 'valid', f'{code}-sample.npy'), given)
+        # np.save(os.path.join(save_dir, 'valid', f'{code}-target.npy'), target)
         g = format_input(given, pad=True)
         t = stack_atoms(onehot_target)
         t = format_sample(t, pad=True)
@@ -315,11 +334,11 @@ def process_data():
         # process data
         onehot_target = one_hot_encode_column(target, 0, 85)
         onehot_target = normalize_target(onehot_target)
-        target = format_sample(onehot_target)
-
-        # save input-output pair
-        np.save(os.path.join(save_dir, 'test', f'{code}-sample.npy'), given)
-        np.save(os.path.join(save_dir, 'test', f'{code}-target.npy'), target)
+        # target = format_sample(onehot_target)
+        #
+        # # save input-output pair
+        # np.save(os.path.join(save_dir, 'test', f'{code}-sample.npy'), given)
+        # np.save(os.path.join(save_dir, 'test', f'{code}-target.npy'), target)
         g = format_input(given, pad=True)
         t = stack_atoms(onehot_target)
         t = format_sample(t, pad=True)
@@ -437,20 +456,25 @@ def get_batch(seq, tar, block_size, batch_size, device):
 # Return raw esm_emb and coords at their natural length.
 class ProteinStructureDataset(Dataset):
     def __init__(self, pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device):
-        self.pdb_files = [f[:4] for f in os.listdir('PDBs/processed_data/train') if f.endswith('.npy') or f.endswith('.ent')]
         self.pdb_dir = pdb_dir
         self.esm_model = esm_model
         self.esm_batch_converter = esm_batch_converter
         self.train_seq = train_seq
         self.train_tar = train_tar
-        self.block_size = 100
-        self.batch_size = 10
+        self.block_size = block_size
+
         self.device = device
         self.traversed = 0
-        self.num_batches = len(self.pdb_files) // self.batch_size
+
+        self.starts = np.where(self.train_seq == 0)[0]
+        print(f'num training: {num_training}')
+
+    def set_batch_size(self, batch_size):
+        self.batch_size = batch_size
+        self.num_batches = num_training // self.batch_size
 
     def __len__(self):
-        return len(self.pdb_files)
+        return num_training
 
     def __iter__(self):
         return self
@@ -480,7 +504,9 @@ class ProteinStructureDataset(Dataset):
 
 
         x, t = self.get_batch(self.train_seq, self.train_tar, self.block_size, self.batch_size, self.device)
+        print(f'x prev shape: {x.shape}')
         x = self.to_embedding(x)
+        print(f'x new shape: {x.shape}')
 
         self.traversed += 1
         if self.traversed >= self.num_batches:
@@ -507,9 +533,21 @@ class ProteinStructureDataset(Dataset):
                 `x` - represents the input tokens, with shape (batch_size, block_size)
                 `y` - represents the target output tokens, with shape (batch_size, block_size)
             """
-        ix = torch.randint(seq.shape[0] - block_size, (batch_size,))
+        # print(f'possible start pos: {start_pos}')
+        # print(f'seq: {seq}')
+        # ix = torch.randint(seq.shape[0] - block_size, (batch_size,))
+        starts = torch.randint(self.starts.shape[0], (batch_size,))
+        print(f'starts: {self.starts}')
+        ix = self.starts[starts]
+        # pick from a random start position!
+        print(f'seq size: {seq.shape}')
         x = torch.stack([torch.from_numpy((seq[i:i + block_size])) for i in ix])
         t = torch.stack([torch.from_numpy((tar[i:i + block_size, :])) for i in ix])
+        print(f'x: {x.shape}')
+        print(f't: {t.shape}')
+        print(f'ix: {ix}')
+        print(f'x: {x[0, 0:5]}')
+        print(f't: {t[0, 0:5, 82:90]}')
         # print(f'tar shape: {tar.shape}')
         # print(f't shape: {t[5, 50:55, 87]}')
         # print(f'x batch shape: {x.shape}')
@@ -779,6 +817,7 @@ def train_model(model,
     """
     # Create DataLoader
     # dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=custom_collate_fn)
+    dataset.set_batch_size(batch_size)
     model.train()
     model.to(device)
 
@@ -786,7 +825,7 @@ def train_model(model,
     iteration = 0
 
     for epoch in range(epochs):
-        loss = 0.0
+        epoch_loss = 0.0
         for batch_idx, (seq_emb, coords_true) in enumerate(dataset):
             # print(f'seq_emb shape: {seq_emb.shape}')
             # print(f'coord_true sha: {coords_true.shape}')
@@ -809,7 +848,7 @@ def train_model(model,
                 optimizer.step()
                 optimizer.zero_grad()
 
-            loss += loss.item()
+            epoch_loss += loss.item()
             iteration += 1
 
             # Print loss at given intervals
@@ -817,9 +856,9 @@ def train_model(model,
                 print(f"Epoch {epoch+1}/{epochs}, Iteration {iteration}, Loss: {loss.item():.4f}")
 
         # Average loss for the epoch
-        loss /= len(dataset)
-        history["loss"].append(loss)
-        print(f"Epoch {epoch+1} completed. Average Loss: {loss:.4f}")
+        epoch_loss = epoch_loss / dataset.num_batches
+        history["loss"].append(epoch_loss)
+        print(f"Epoch {epoch+1} completed. Average Loss: {epoch_loss:.4f}")
 
     return model, history
 
@@ -860,6 +899,9 @@ if __name__ == "__main__":
 
     train_seq = np.load('PDBs/big_data/in-train.npy', mmap_mode='r', allow_pickle=True)
     train_tar = np.load('PDBs/big_data/out-train.npy', mmap_mode='r', allow_pickle=True)
+
+    print(f'train_seq: {train_seq.shape}')
+
 
     esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
     esm_batch_converter = esm_alphabet.get_batch_converter()
@@ -918,12 +960,12 @@ if __name__ == "__main__":
 
 
 
-    train_model(model, dataset, criterion, optimizer, epochs=3, batch_size=2, shuffle=True, device=device,
+    train_model(model, dataset, criterion, optimizer, epochs=100, batch_size=2, shuffle=True, device=device,
                 print_interval=50)
 
     # Run a single example to evaluate our predictions!
     # Just make sure it produces something reasonable.
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=custom_collate_fn)
+    # dataloader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=custom_collate_fn)
     model.eval()
     model.to(device)
 
@@ -946,8 +988,6 @@ if __name__ == "__main__":
 
     ct_cpu = coords_true.to('cpu')[0]
     cp_cpu = coords_pred.to('cpu')[0]
-    print(f'coords true cpu: {ct_cpu.shape}')
-    print(f'coords pred cpu: {cp_cpu.shape}')
 
 
     # ct_cpu = coords_true.cpu()
@@ -955,9 +995,9 @@ if __name__ == "__main__":
 
     unstacked_true = unstack(ct_cpu)
     unstacked_pred = unstack(cp_cpu)
-    print(f'final shape: {unstacked_true.shape}')
-    print(f'prediction: {unstacked_pred.shape}')
-    print(f'true: {unstacked_true.shape}')
+    print(f'final shape     : {unstacked_true.shape}')
+    print(f'prediction shape: {unstacked_pred.shape}')
+    # print(f'true: {unstacked_true.shape}')
 
     # print(f'true: {unstacked_true[3, :]}')
     # print(f'unstacked true: {unstacked_true[:100, -5:]}')
@@ -968,7 +1008,7 @@ if __name__ == "__main__":
     #     print(f'pred: {p}')
     #     print()
 
-    for t, p in zip(unstacked_true[:100, 0, -5:], unstacked_pred[:100, 0, -5:]):
+    for t, p in zip(unstacked_true[50:100, 0, -5:], unstacked_pred[50:100, 0, -5:]):
         print(f'true: {t}')
         print(f'pred: {p}')
         print()
