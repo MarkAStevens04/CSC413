@@ -20,6 +20,27 @@ block_size = 109
 num_training = 0
 
 
+
+def setup():
+    os.makedirs(f'models', exist_ok=True)
+    os.makedirs(f'PDBs', exist_ok=True)
+    os.makedirs(f'PDBs/all', exist_ok=True)
+    os.makedirs(f'PDBs/big_data', exist_ok=True)
+    os.makedirs(f'PDBs/pre_processed_data', exist_ok=True)
+    os.makedirs(f'PDBs/processed_data', exist_ok=True)
+    os.makedirs(f'Logs')
+
+
+
+
+
+
+
+
+
+
+
+
 def one_hot_encode_column(array, column_index, num_classes):
     """
     Converts a specified column of an array into one-hot encoded vectors.
@@ -263,13 +284,13 @@ def process_data():
     random.shuffle(code_set)
     print(f'all names: {code_set}')
     # make our train-test split
-    # train_codes = code_set[:int(len(code_set) * 0.8)]
-    # valid_codes = code_set[int(len(code_set) * 0.8):int(len(code_set) * 0.9)]
-    # test_codes = code_set[int(len(code_set) * 0.9):]
+    train_codes = code_set[:int(len(code_set) * 0.8)]
+    valid_codes = code_set[int(len(code_set) * 0.8):int(len(code_set) * 0.9)]
+    test_codes = code_set[int(len(code_set) * 0.9):]
 
-    train_codes = code_set[:]
-    valid_codes = []
-    test_codes = []
+    # train_codes = code_set[:]
+    # valid_codes = []
+    # test_codes = []
 
     # Saves processed data into proteins_cleaned under test, train, and valid
     pu = protein_unifier()
@@ -988,6 +1009,14 @@ def unstack(coords):
 
 
 if __name__ == "__main__":
+    experiment_numer = 0
+    f = open('trial_tracker.txt', 'r+')
+    attempt_num = int(f.readline())
+
+    f = open('trial_tracker.txt', 'r+')
+    f.writelines(f'{attempt_num + 1}\n')
+    f.close()
+
     process_data()
     code = '5RW2'
 
@@ -1062,7 +1091,7 @@ if __name__ == "__main__":
 
 
 
-    train_model(model, dataset, criterion, optimizer, epochs=1000, batch_size=2, shuffle=True, device=device,
+    train_model(model, dataset, criterion, optimizer, epochs=10, batch_size=3, shuffle=True, device=device,
                 print_interval=50)
 
     # Run a single example to evaluate our predictions!
@@ -1071,7 +1100,8 @@ if __name__ == "__main__":
     model.eval()
     model.to(device)
 
-    for batch_idx, (seq_emb, coords_true) in enumerate(dataset):
+    dataloader = DataLoader(dataset, batch_size=3, shuffle=True, collate_fn=custom_collate_fn_two)
+    for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
         coords_true = coords_true.to(device)
         seq_emb = seq_emb.to(device)
         coords_pred = model(seq_emb)
@@ -1088,6 +1118,8 @@ if __name__ == "__main__":
     # Display the result of our single prediction
     # print(f'coords true: {coords_true}')
     print(f'original shape: {coords_true.shape}')
+    print(f'original pred shape: {coords_pred.shape}')
+
     print(f'selection: {coords_true[0, 50:55, 87]}')
 
     ct_cpu = coords_true.to('cpu')[0]
@@ -1112,10 +1144,13 @@ if __name__ == "__main__":
     #     print(f'pred: {p}')
     #     print()
 
-    for t, p in zip(unstacked_true[50:100, 0, -5:], unstacked_pred[50:100, 0, -5:]):
+    for t, p in zip(unstacked_true[50:100, -5:], unstacked_pred[50:100, -5:]):
         print(f'true: {t}')
         print(f'pred: {p}')
         print()
+
+
+    torch.save(model, f'models/model-{attempt_num}')
 
     # Example code for if we want to turn off the gradient of our undefined input
     # def get_hook(param_idx):
