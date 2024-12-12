@@ -109,9 +109,16 @@ class protein_unifier():
 
     def save(self, name):
         # Name should be XXX.bin
-        self.in_file = np.array(self.in_file)
-        self.in_file.tofile(f'{self.save_path}in-{name}.bin')
-        self.out_file.tofile(f'{self.save_path}out-{name}.bin')
+
+        # convert to int array before saving...
+        self.new_in = np.ones((len(self.in_file), 1))
+        for i, a in enumerate(self.in_file):
+            n = ord(a)
+            # print(f'i: {n}')
+            self.new_in[i] = n
+
+        np.save(f'{self.save_path}in-{name}', allow_pickle=True, arr=self.new_in)
+        np.save(f'{self.save_path}out-{name}', allow_pickle=True, arr=self.out_file)
 
     def __repr__(self):
         msg = 'PROTEIN UNIFIER: \n' + f'total accumulated sequence length: {len(self.in_file)} \n' + f'total accumulated protein  length: {self.out_file.shape} \n'
@@ -369,6 +376,39 @@ def custom_collate_fn(batch):
 
 
 
+def get_batch(seq, tar, block_size, batch_size, device):
+    """
+        Return a minibatch of data. This function is not deterministic.
+        Calling this function multiple times will result in multiple different
+        return values.
+
+        Parameters:
+            `data` - a numpy array (e.g., created via a call to np.memmap)
+            `block_size` - the length of each sequence
+            `batch_size` - the number of sequences in the batch
+            `device` - the device to place the returned PyTorch tensor
+
+        Returns: A tuple of PyTorch tensors (x, t), where
+            `x` - represents the input tokens, with shape (batch_size, block_size)
+            `y` - represents the target output tokens, with shape (batch_size, block_size)
+        """
+    ix = torch.randint(seq.shape[0] - block_size, (batch_size,))
+    x = torch.stack([torch.from_numpy((seq[i:i + block_size])) for i in ix])
+    t = torch.stack([torch.from_numpy((tar[i:i + block_size, :])) for i in ix])
+    # print(f'x batch shape: {x.shape}')
+    # print(f't batch shape: {t.shape}')
+    if 'cuda' in device:
+        # pin arrays x,t, which allows us to move them to GPU asynchronously
+        #  (non_blocking=True)
+        x, t = x.pin_memory().to(device, non_blocking=True), t.pin_memory().to(device, non_blocking=True)
+    else:
+        x, t = x.to(device), t.to(device)
+    return x, t
+
+
+
+
+
 
 
 # Example usage:
@@ -407,6 +447,49 @@ class ProteinStructureDataset(Dataset):
 
         # No padding/truncation here. Just return raw.
         return esm_emb.cpu(), coords
+
+
+    def get_batch(self, seq, tar, block_size, batch_size, device):
+        """
+            Return a minibatch of data. This function is not deterministic.
+            Calling this function multiple times will result in multiple different
+            return values.
+
+            Parameters:
+                `data` - a numpy array (e.g., created via a call to np.memmap)
+                `block_size` - the length of each sequence
+                `batch_size` - the number of sequences in the batch
+                `device` - the device to place the returned PyTorch tensor
+
+            Returns: A tuple of PyTorch tensors (x, t), where
+                `x` - represents the input tokens, with shape (batch_size, block_size)
+                `y` - represents the target output tokens, with shape (batch_size, block_size)
+            """
+        ix = torch.randint(seq.shape[0] - block_size, (batch_size,))
+        x = torch.stack([torch.from_numpy((seq[i:i + block_size])) for i in ix])
+        t = torch.stack([torch.from_numpy((tar[i:i + block_size, :])) for i in ix])
+        # print(f'x batch shape: {x.shape}')
+        # print(f't batch shape: {t.shape}')
+        if 'cuda' in device:
+            # pin arrays x,t, which allows us to move them to GPU asynchronously
+            #  (non_blocking=True)
+            x, t = x.pin_memory().to(device, non_blocking=True), t.pin_memory().to(device, non_blocking=True)
+        else:
+            x, t = x.to(device), t.to(device)
+        return x, t
+
+
+
+    def to_embedding(self, ordinal_seq):
+        """
+        Converts a batch of ordinals to a proper embedding!
+        # Input: (B, L, 1)
+        # Output: (B, L, Embedding_size)
+
+        :param indices:
+        :return:
+        """
+        pass
 
     def get_sequence_and_coords(self, pdb_path):
         # Extract raw sequence and coords
@@ -704,15 +787,15 @@ if __name__ == "__main__":
     process_data()
     code = '5RW2'
 
-    given = np.load(f'PDBs/processed_data/train/{code}-sample.npy', mmap_mode='r', allow_pickle=True)
-    target = np.load(f'PDBs/processed_data/train/{code}-target.npy', mmap_mode='r', allow_pickle=True)
-
-    print(f'target shape: {target.shape}')
-    print(f'given second: {target[81:150, -5:]}')
-    # Fourth column: Whether we know or don't know position
-    # Fifth column: Whether we should know the position or not (does the atom exist in the amino or not)
-
-    # output_len = 27 * (90) (there are 27 atoms which we stack into a single row)
+    # given = np.load(f'PDBs/processed_data/train/{code}-sample.npy', mmap_mode='r', allow_pickle=True)
+    # target = np.load(f'PDBs/processed_data/train/{code}-target.npy', mmap_mode='r', allow_pickle=True)
+    #
+    # print(f'target shape: {target.shape}')
+    # print(f'given second: {target[81:150, -5:]}')
+    # # Fourth column: Whether we know or don't know position
+    # # Fifth column: Whether we should know the position or not (does the atom exist in the amino or not)
+    #
+    # # output_len = 27 * (90) (there are 27 atoms which we stack into a single row)
     output_len = 2430
 
 
@@ -731,7 +814,58 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     criterion = RMSDLoss()
 
+    seq = 'ATGATTTCA'
+    batch = [("protein", seq)]
 
+    _, _, tokens = esm_batch_converter(batch)
+    tokens = tokens.to(next(esm_model.parameters()).device)
+
+    with torch.no_grad():
+        results = esm_model(tokens, repr_layers=[esm_model.num_layers])
+    # Exclude CLS token
+    esm_emb_a = results["representations"][esm_model.num_layers][0, 1:len(seq) + 1, :]
+
+
+    seq = 'AFLAAAYGA'
+    batch = [("protein", seq)]
+
+    _, _, tokens = esm_batch_converter(batch)
+    tokens = tokens.to(next(esm_model.parameters()).device)
+
+    with torch.no_grad():
+        results = esm_model(tokens, repr_layers=[esm_model.num_layers])
+    # Exclude CLS token
+    esm_emb_b = results["representations"][esm_model.num_layers][0, 1:len(seq) + 1, :]
+    print()
+    print(f"Embedding: {esm_emb_a[1, :6]}")
+    print(f"Embedding: {esm_emb_b[1, :6]}")
+    print()
+    print(f"Embedding: {esm_emb_a[2, :6]}")
+    print(f"Embedding: {esm_emb_b[2, :6]}")
+    print()
+    print(f"Embedding: {esm_emb_a[3, :6]}")
+    print(f"Embedding: {esm_emb_b[3, :6]}")
+    print()
+    print(f"Embedding: {esm_emb_a[8, :6]}")
+    print(f"Embedding: {esm_emb_b[8, :6]}")
+    print()
+
+
+
+
+
+    train_seq = np.load('PDBs/big_data/in-train.npy', mmap_mode='r', allow_pickle=True)
+    train_tar = np.load('PDBs/big_data/out-train.npy', mmap_mode='r', allow_pickle=True)
+
+    # train_seq = np.memmap('PDBs/big_data/in-train.bin')
+    # train_tar = np.memmap('PDBs/big_data/out-train.bin', shape=(-1, 2430))
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    print(f'seq shape: {train_seq.shape}')
+    print(f'tar shape: {train_tar.shape}')
+
+    get_batch(train_seq, train_tar, 100, 3, device)
 
     print(f'cuda available? {torch.cuda.is_available()}')
     print(f'torch version: {torch.version.cuda}')
