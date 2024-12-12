@@ -446,11 +446,16 @@ class ProteinStructureDataset(Dataset):
         self.block_size = 100
         self.batch_size = 10
         self.device = device
+        self.traversed = 0
+        self.num_batches = len(self.pdb_files) // self.batch_size
 
     def __len__(self):
         return len(self.pdb_files)
 
-    def __getitem__(self, idx):
+    def __iter__(self):
+        return self
+
+    def __next__(self):
         # print(f'getting item...')
         # print(f'code: {self.pdb_files[idx]}')
         # pdb_path = f'PDBs/processed_data/train/{self.pdb_files[idx]}'
@@ -477,6 +482,12 @@ class ProteinStructureDataset(Dataset):
         x, t = self.get_batch(self.train_seq, self.train_tar, self.block_size, self.batch_size, self.device)
         x = self.to_embedding(x)
 
+        self.traversed += 1
+        if self.traversed >= self.num_batches:
+            self.traversed = 0
+            raise StopIteration
+
+
         return x, t
 
 
@@ -499,9 +510,11 @@ class ProteinStructureDataset(Dataset):
         ix = torch.randint(seq.shape[0] - block_size, (batch_size,))
         x = torch.stack([torch.from_numpy((seq[i:i + block_size])) for i in ix])
         t = torch.stack([torch.from_numpy((tar[i:i + block_size, :])) for i in ix])
+        # print(f'tar shape: {tar.shape}')
+        # print(f't shape: {t[5, 50:55, 87]}')
         # print(f'x batch shape: {x.shape}')
         # print(f't batch shape: {t.shape}')
-        print(f'device: {device}')
+        # print(f'device: {device}')
         if device == 'cuda':
             # pin arrays x,t, which allows us to move them to GPU asynchronously
             #  (non_blocking=True)
@@ -526,7 +539,7 @@ class ProteinStructureDataset(Dataset):
         with torch.no_grad():
             results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
         esm_emb = results["representations"][self.esm_model.num_layers]
-        print(f'embedding shape: {esm_emb.shape}')
+        # print(f'embedding shape: {esm_emb.shape}')
         return esm_emb
 
 
@@ -765,7 +778,7 @@ def train_model(model,
         history (dict): A dictionary containing training loss history.
     """
     # Create DataLoader
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=custom_collate_fn)
+    # dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=custom_collate_fn)
     model.train()
     model.to(device)
 
@@ -773,8 +786,11 @@ def train_model(model,
     iteration = 0
 
     for epoch in range(epochs):
-        epoch_loss = 0.0
-        for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
+        loss = 0.0
+        for batch_idx, (seq_emb, coords_true) in enumerate(dataset):
+            # print(f'seq_emb shape: {seq_emb.shape}')
+            # print(f'coord_true sha: {coords_true.shape}')
+            # print(f'coord_true: {coords_true[5, 50:55, 87]}')
             seq_emb = seq_emb.to(device)  # [B, L, D]
             coords_true = coords_true.to(device)  # [B, L, 3]
 
@@ -793,7 +809,7 @@ def train_model(model,
                 optimizer.step()
                 optimizer.zero_grad()
 
-            epoch_loss += loss.item()
+            loss += loss.item()
             iteration += 1
 
             # Print loss at given intervals
@@ -801,9 +817,9 @@ def train_model(model,
                 print(f"Epoch {epoch+1}/{epochs}, Iteration {iteration}, Loss: {loss.item():.4f}")
 
         # Average loss for the epoch
-        epoch_loss /= len(dataloader)
-        history["loss"].append(epoch_loss)
-        print(f"Epoch {epoch+1} completed. Average Loss: {epoch_loss:.4f}")
+        loss /= len(dataset)
+        history["loss"].append(loss)
+        print(f"Epoch {epoch+1} completed. Average Loss: {loss:.4f}")
 
     return model, history
 
@@ -813,13 +829,17 @@ def unstack(coords):
   """
   Unstacks the coordinates
   """
-  _, N, M = coords.shape
+  N, M = coords.shape
   N = N * 27
   M = M // 27
   coords = coords.detach().numpy()
-  reshaped_parts = coords.reshape(N // 27, M, 27)
-  original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
-  return original_array
+  reshaped_parts = coords.reshape(N // 27, 27, M)
+
+  # How we stack:
+  # reshaped_target = target.reshape(N // 27, 27, M)  # Split into groups of 27 rows
+  # stacked_target = reshaped_target.reshape(N // 27, M * 27)
+  # original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
+  return reshaped_parts
 
 
 
@@ -898,7 +918,7 @@ if __name__ == "__main__":
 
 
 
-    train_model(model, dataset, criterion, optimizer, epochs=1000, batch_size=2, shuffle=True, device=device,
+    train_model(model, dataset, criterion, optimizer, epochs=3, batch_size=2, shuffle=True, device=device,
                 print_interval=50)
 
     # Run a single example to evaluate our predictions!
@@ -907,7 +927,7 @@ if __name__ == "__main__":
     model.eval()
     model.to(device)
 
-    for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
+    for batch_idx, (seq_emb, coords_true) in enumerate(dataset):
         coords_true = coords_true.to(device)
         seq_emb = seq_emb.to(device)
         coords_pred = model(seq_emb)
@@ -920,19 +940,35 @@ if __name__ == "__main__":
     #             coords_pred = model(seq_emb)
 
     # Display the result of our single prediction
-    print(f'coords true: {coords_true}')
+    # print(f'coords true: {coords_true}')
     print(f'original shape: {coords_true.shape}')
-    unstacked_true = unstack(coords_true)
-    unstacked_pred = unstack(coords_pred)
+    print(f'selection: {coords_true[0, 50:55, 87]}')
+
+    ct_cpu = coords_true.to('cpu')[0]
+    cp_cpu = coords_pred.to('cpu')[0]
+    print(f'coords true cpu: {ct_cpu.shape}')
+    print(f'coords pred cpu: {cp_cpu.shape}')
+
+
+    # ct_cpu = coords_true.cpu()
+    # cp_cpu = coords_pred.cpu()
+
+    unstacked_true = unstack(ct_cpu)
+    unstacked_pred = unstack(cp_cpu)
     print(f'final shape: {unstacked_true.shape}')
     print(f'prediction: {unstacked_pred.shape}')
     print(f'true: {unstacked_true.shape}')
 
-    print(f'true: {unstacked_true[3, :]}')
+    # print(f'true: {unstacked_true[3, :]}')
     # print(f'unstacked true: {unstacked_true[:100, -5:]}')
     # print(f'unstacked pred: {unstacked_pred[:100, -5:]}')
 
-    for t, p in zip(unstacked_true[:100, -5:], unstacked_pred[:100, -5:]):
+    # for t, p in zip(unstacked_true[:100, -5:], unstacked_pred[:100, -5:]):
+    #     print(f'true: {t}')
+    #     print(f'pred: {p}')
+    #     print()
+
+    for t, p in zip(unstacked_true[:100, 0, -5:], unstacked_pred[:100, 0, -5:]):
         print(f'true: {t}')
         print(f'pred: {p}')
         print()
