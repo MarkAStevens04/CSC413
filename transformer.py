@@ -417,6 +417,58 @@ def custom_collate_fn(batch):
 
 
 
+
+
+
+
+def custom_collate_fn_two(batch):
+    """
+    Collate function to handle variable-length (esm_emb, coords) pairs.
+    Each item in batch is (esm_emb, coords) with shape [L, D] and [L, 3], respectively.
+
+    Steps:
+    1. Find max_length across all samples in the batch.
+    2. Pad all embeddings and coords to this max_length.
+    3. Stack them along the batch dimension.
+    """
+    # ******************* Extend this by adding your own stacking function!!! *******************
+    # So first stack all atoms from all amino acids for all proteins.
+    # Then, add BOS & EOS identifiers.
+    # Then stack all proteins on each other.
+    # Then, save this super stack as a single file.
+    # Finally, load memory maps from this super stack.
+
+
+    # print(f'batch[0]: {batch[0]}')
+    x = torch.zeros(len(batch), batch[0][0].shape[1], batch[0][0].shape[2])
+    t = torch.zeros(len(batch), batch[0][1].shape[0], batch[0][1].shape[1])
+    # print(f'x shape: {x.shape}')
+    # print(f't shape: {t.shape}')
+
+    for i, (esm_emb, coords) in enumerate(batch):
+        # print(f'coords: {coords.shape}')
+        # print(f'esm_emb: {esm_emb.shape}')
+        x[i, :, :] = esm_emb
+        t[i, :, :] = coords
+
+    if device == 'cuda':
+        # pin arrays x,t, which allows us to move them to GPU asynchronously
+        #  (non_blocking=True)
+        x, t = x.pin_memory().to(device, non_blocking=True), t.pin_memory().to(device, non_blocking=True)
+    else:
+        x, t = x.to(device), t.to(device)
+    return x, t
+
+
+
+
+
+
+
+
+
+
+
 def get_batch(seq, tar, block_size, batch_size, device):
     """
         Return a minibatch of data. This function is not deterministic.
@@ -495,52 +547,63 @@ class ProteinStructureDataset(Dataset):
     def __iter__(self):
         return self
 
-    def __next__(self):
-        if self.traversed >= self.num_batches:
-            self.update_batches()
-            self.traversed = 0
-            raise StopIteration
-        else:
+    # def __next__(self):
+    #     if self.traversed >= self.num_batches:
+    #         self.update_batches()
+    #         self.traversed = 0
+    #         raise StopIteration
+    #     else:
+    #
+    #         # print(f'getting item...')
+    #         # print(f'code: {self.pdb_files[idx]}')
+    #         # pdb_path = f'PDBs/processed_data/train/{self.pdb_files[idx]}'
+    #         #
+    #         #
+    #         # # pdb_path = os.path.join(self.pdb_dir, self.pdb_files[idx])
+    #         # seq, coords = self.get_sequence_and_coords(pdb_path)
+    #         # seq = str(seq)
+    #         #
+    #         # # Obtain ESM embeddings for the raw sequence length
+    #         # batch = [("protein", seq)]
+    #         # _, _, tokens = self.esm_batch_converter(batch)
+    #         # tokens = tokens.to(next(self.esm_model.parameters()).device)
+    #         # with torch.no_grad():
+    #         #     results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
+    #         # # Exclude CLS token
+    #         # esm_emb = results["representations"][self.esm_model.num_layers][0, 1:len(seq)+1, :]
+    #         # # print(f'esm_emb shape: {esm_emb.shape}')
+    #         # # print(f'coords shape: {coords.shape}')
+    #         #
+    #         # # No padding/truncation here. Just return raw.
+    #
+    #
+    #
+    #         x, t = self.get_batch(self.train_seq, self.train_tar, self.block_size, self.batch_size, self.device, self.traversed)
+    #
+    #
+    #         # print(f'x prev shape: {x.shape}')
+    #
+    #         # print(f'x new shape: {x.shape}')
+    #         # print(f'train seq: {x.shape}')
+    #         # print(f'train tar: {t.shape}')
+    #         # print(f'num batches: {self.num_batches}')
+    #
+    #         self.traversed += 1
+    #
+    #
+    #         return x, t
 
-            # print(f'getting item...')
-            # print(f'code: {self.pdb_files[idx]}')
-            # pdb_path = f'PDBs/processed_data/train/{self.pdb_files[idx]}'
-            #
-            #
-            # # pdb_path = os.path.join(self.pdb_dir, self.pdb_files[idx])
-            # seq, coords = self.get_sequence_and_coords(pdb_path)
-            # seq = str(seq)
-            #
-            # # Obtain ESM embeddings for the raw sequence length
-            # batch = [("protein", seq)]
-            # _, _, tokens = self.esm_batch_converter(batch)
-            # tokens = tokens.to(next(self.esm_model.parameters()).device)
-            # with torch.no_grad():
-            #     results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
-            # # Exclude CLS token
-            # esm_emb = results["representations"][self.esm_model.num_layers][0, 1:len(seq)+1, :]
-            # # print(f'esm_emb shape: {esm_emb.shape}')
-            # # print(f'coords shape: {coords.shape}')
-            #
-            # # No padding/truncation here. Just return raw.
+    def __getitem__(self, idx):
+
+        coords = torch.from_numpy((self.train_tar[idx:idx + block_size]))
+        seq = torch.from_numpy((self.train_seq[idx:idx + block_size]))
+        seq = seq[None, :]
+        # print(f'seq shape pre: {seq.shape}')
+        esm_emb = self.to_embedding(seq)
+        # print(f'seq shape post: {seq.shape}')
 
 
-
-            x, t = self.get_batch(self.train_seq, self.train_tar, self.block_size, self.batch_size, self.device, self.traversed)
-
-
-            # print(f'x prev shape: {x.shape}')
-            x = self.to_embedding(x)
-            # print(f'x new shape: {x.shape}')
-            # print(f'train seq: {x.shape}')
-            # print(f'train tar: {t.shape}')
-            # print(f'num batches: {self.num_batches}')
-
-            self.traversed += 1
-
-
-            return x, t
-
+        return esm_emb, coords
 
     def get_batch(self, seq, tar, block_size, batch_size, device, traversed):
         """
@@ -601,6 +664,7 @@ class ProteinStructureDataset(Dataset):
 
 
 
+
     def to_embedding(self, tokens):
         """
         Converts a batch of tokens to a proper embedding!
@@ -610,11 +674,12 @@ class ProteinStructureDataset(Dataset):
         :param indices:
         :return:
         """
-
+        # print(f'tokens: {tokens[0].shape}')
         tokens = tokens.to(next(self.esm_model.parameters()).device)
         with torch.no_grad():
             results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
         esm_emb = results["representations"][self.esm_model.num_layers]
+        # print(f'embedded! {esm_emb.shape}')
         # print(f'embedding shape: {esm_emb.shape}')
         return esm_emb
 
@@ -854,7 +919,7 @@ def train_model(model,
         history (dict): A dictionary containing training loss history.
     """
     # Create DataLoader
-    # dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=custom_collate_fn)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=custom_collate_fn_two)
     dataset.set_batch_size(batch_size)
     model.train()
     model.to(device)
@@ -864,7 +929,7 @@ def train_model(model,
 
     for epoch in range(epochs):
         epoch_loss = 0.0
-        for batch_idx, (seq_emb, coords_true) in enumerate(dataset):
+        for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
             # print(f'something returned')
             # print(f'seq_emb shape: {seq_emb.shape}')
             # print(f'coord_true sha: {coords_true.shape}')
@@ -895,7 +960,7 @@ def train_model(model,
                 print(f"Epoch {epoch+1}/{epochs}, Iteration {iteration}, Loss: {loss.item():.4f}")
 
         # Average loss for the epoch
-        epoch_loss = epoch_loss / dataset.num_batches
+        epoch_loss /= len(dataloader)
         history["loss"].append(epoch_loss)
         print(f"Epoch {epoch+1} completed. Average Loss: {epoch_loss:.4f}")
 
@@ -994,9 +1059,6 @@ if __name__ == "__main__":
     print(f'cuda available? {torch.cuda.is_available()}')
     print(f'torch version: {torch.version.cuda}')
     print(f'torch device: {device}')
-
-
-
 
 
 
