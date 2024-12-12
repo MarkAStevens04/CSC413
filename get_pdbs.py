@@ -453,14 +453,17 @@ def obtain_training():
 
 
 
-def adjust_position(name):
+def adjust_position(name, atoms, amino_expert):
     """
     Adjusts the position of some atoms in a mmCif file and saves the file!
     :return:
     """
+    print(f'adjusting position...')
     n = mmCIF_DIR + "/" + name.lower() + ".cif"
     file = open(n)
     p_struct = parser.get_structure(name, file)
+    i = 0
+    print(f'amino decode: {amino_expert.decode}')
     for model in p_struct:
         for chain in model:
             for residue in chain:
@@ -468,6 +471,11 @@ def adjust_position(name):
                     # Example: Adjusting x, y, z coordinates
                     x, y, z = atom.coord  # Get current coordinates
                     atom.coord = [x + 1.0, y - 1.0, z + 2.0]  # Modify coordinates
+                    while atoms[i][4] == 0 and i < len(atoms):
+                        i += 1
+                    print(f'row: {atoms[i]} {amino_expert.decode[atoms[i][0]]}')
+                    print(f'atom: {atom}')
+                    i += 1
 
     io = MMCIFIO()
     io.set_structure(p_struct)

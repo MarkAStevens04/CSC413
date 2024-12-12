@@ -299,11 +299,12 @@ class Sequence_Parser():
 
         print(f'train: {given}')
         print()
-        print(f'{target.shape()}')
+        print(f'{target.shape}')
         print(f'target: {target[50:150, -5:]}')
         print()
         largest = 0
         smallest = 10000000000
+        return given, target
 
         # for n in os.listdir('PDBs/pre_processed_data'):
         #     given = np.load(f'PDBs/pre_processed_data/{n}', mmap_mode='r', allow_pickle=True)
@@ -344,8 +345,9 @@ if __name__ == '__main__':
     a = Sequence_Parser(max_samples=10)
     # a.parse_names(['6XTB'])
     print(a.e.encode)
-    a.RAM_Efficient_parsing(batch_size=10)
-    # a.open_struct('6XTB')
+    # a.RAM_Efficient_parsing(batch_size=10)
+    g, t = a.open_struct('6XTB')
+    get_pdbs.adjust_position('6XTB', t, a.e)
 
     # logging.info(f'Took {time.time() - start} seconds!!!')
     logging.warning(f'Complete! Took {time.time() - start} seconds!!!')

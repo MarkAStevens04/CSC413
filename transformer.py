@@ -11,24 +11,41 @@ import numpy as np
 import random
 from torch.utils.data import DataLoader
 import torch
+import logging
+import logging.handlers
+import time
+import parse_seq
+import sys
 # random.seed(777)
 
 esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
 esm_batch_converter = esm_alphabet.get_batch_converter()
 
-block_size = 109
-num_training = 0
+block_size = 1000
+num_training = 800
 
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
-def setup():
-    os.makedirs(f'models', exist_ok=True)
+
+def setup(node_name=None):
+    logging.info(f'Setting up...')
     os.makedirs(f'PDBs', exist_ok=True)
     os.makedirs(f'PDBs/all', exist_ok=True)
     os.makedirs(f'PDBs/big_data', exist_ok=True)
     os.makedirs(f'PDBs/pre_processed_data', exist_ok=True)
     os.makedirs(f'PDBs/processed_data', exist_ok=True)
-    os.makedirs(f'Logs')
+
+
+    if node_name is not None:
+        os.makedirs(f'models', exist_ok=True)
+        os.makedirs(f'models/{node_name}', exist_ok=True)
+        os.makedirs(f'Logs', exist_ok=True)
+        os.makedirs(f'Logs/{node_name}', exist_ok=True)
+    else:
+        os.makedirs(f'models', exist_ok=True)
+        os.makedirs(f'Logs', exist_ok=True)
 
 
 
@@ -152,6 +169,9 @@ class protein_unifier():
             print(f'input and output files are out of sync!')
             print(f'in_file shape: {len(self.in_file)}')
             print(f'out_file shape: {self.out_file.shape}')
+            logging.warning(f'input and output files are out of sync')
+            logging.info(f'in_file shape: {len(self.in_file)}')
+            logging.info(f'out_file shape: {self.out_file.shape}')
 
     def save(self, name):
         # Name should be XXX.bin
@@ -190,6 +210,9 @@ def format_sample(target, pad=False):
         print(f'uh oh! Possibly cutting off values')
         print(f'target length: {target.shape[0]}')
         print(f'max length: {sequence_length}')
+        logging.warning(f'uh oh! Possibly cutting off values')
+        logging.info(f'target length: {target.shape[0]}')
+        logging.info(f'max length: {sequence_length}')
 
 
     if target.shape[0] + 2 < sequence_length:
@@ -248,9 +271,9 @@ def format_input(target, pad=False):
 
     target = str(target).upper()
     if len(target) > sequence_length + 2:
-        print(f'UH OH!!! CUTTING OFF VALUES!')
-        print(f'len target: {len(target)}')
-        print(f'max size: {sequence_length}')
+        logging.warning(f'UH OH!!! CUTTING OFF VALUES!')
+        logging.info(f'len target: {len(target)}')
+        logging.info(f'max size: {sequence_length}')
 
     if len(target) + 2 < sequence_length:
         padding = PAD * (sequence_length - len(target) - 2)
@@ -268,18 +291,18 @@ def format_input(target, pad=False):
 
 
 
-def process_data():
+def process_data(max_proteins=1000):
     open_dir = 'PDBs/pre_processed_data'
     save_dir = 'PDBs/processed_data'
 
     os.makedirs(save_dir, exist_ok=True)
-    os.makedirs(os.path.join(save_dir, 'train'), exist_ok=True)
-    os.makedirs(os.path.join(save_dir, 'valid'), exist_ok=True)
-    os.makedirs(os.path.join(save_dir, 'test'), exist_ok=True)
+    # os.makedirs(os.path.join(save_dir, 'train'), exist_ok=True)
+    # os.makedirs(os.path.join(save_dir, 'valid'), exist_ok=True)
+    # os.makedirs(os.path.join(save_dir, 'test'), exist_ok=True)
 
     # Get set of protein codes we have already pre-processed
     code_set = {name[:4] for name in os.listdir(open_dir)}
-    code_set = list(code_set)
+    code_set = list(code_set)[:max_proteins]
     # randomize
     random.shuffle(code_set)
     print(f'all names: {code_set}')
@@ -294,7 +317,8 @@ def process_data():
 
     # Saves processed data into proteins_cleaned under test, train, and valid
     pu = protein_unifier()
-    for code in train_codes:
+    for i, code in enumerate(train_codes):
+        print(f'Saved one! {code} {round(((i / len(train_codes)) * 100), 2)}')
         given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
         target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
 
@@ -919,7 +943,9 @@ def train_model(model,
                 device='cpu',
                 print_interval=10,
                 # Add gradient accumulation parameters
-                accumulation_steps=1):  # Accumulate gradients over this many steps
+                accumulation_steps=1, # Accumulate gradients over this many steps
+                save_after=1000,
+                save_loc=None):
     """
     Train a given model on the provided dataset.
 
@@ -939,6 +965,7 @@ def train_model(model,
         model (nn.Module): The trained model.
         history (dict): A dictionary containing training loss history.
     """
+    m = 0 #Tracks the save state of our model!
     # Create DataLoader
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=custom_collate_fn_two)
     dataset.set_batch_size(batch_size)
@@ -976,7 +1003,12 @@ def train_model(model,
             epoch_loss += loss.item()
             iteration += 1
 
-            # Print loss at given intervals
+            # Print loss & save model at given intervals
+            if iteration % save_after == 0:
+                logging.info(f'saved model {m}')
+                logging.info(f'Epoch {epoch+1}/{epochs}, Iteration {iteration}, Loss: {loss.item():.4f}')
+                torch.save(model, f'{save_loc}-{m}')
+                m += 1
             if iteration % print_interval == 0:
                 print(f"Epoch {epoch+1}/{epochs}, Iteration {iteration}, Loss: {loss.item():.4f}")
 
@@ -1009,7 +1041,66 @@ def unstack(coords):
 
 
 if __name__ == "__main__":
-    experiment_numer = 0
+    # System arguments: Node name, reprocess, data size, num_heads, depth!
+    print(f'sys argv: {sys.argv}')
+    if len(sys.argv) > 1:
+        node_name = sys.argv[1]
+        reprocess = sys.argv[2]
+        try:
+            data_size = int(sys.argv[3])
+        except:
+            data_size = 10
+        try:
+            num_heads = int(sys.argv[4])
+            depth = int(sys.argv[5])
+        except:
+            num_heads = 8
+            depth = 4
+
+    else:
+        node_name = 'Default'
+        reprocess = 't'
+        data_size = 10
+        num_heads = 8
+        depth = 4
+
+    setup(node_name=node_name)
+
+
+    # ---------------------- Logging framework ----------------------
+    # 10MB handlers
+    file_handler = logging.handlers.RotatingFileHandler(f'Logs/{node_name}/Full_Log.log', maxBytes=10000000,
+                                                        backupCount=5)
+    file_handler.setLevel(logging.DEBUG)
+    # Starts each call as a new log!
+    file_handler.doRollover()
+
+    master_handler = logging.FileHandler(f'Logs/{node_name}/ERRORS.log', mode='w')
+    master_handler.setLevel(logging.ERROR)
+
+    logging.basicConfig(level=logging.DEBUG, handlers=[file_handler, master_handler],
+                        format='%(levelname)-8s: %(asctime)-22s %(module)-20s %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S | ')
+
+    logging.info(f'Started with following system variables:')
+    logging.info(f'{sys.argv}')
+    logging.info(f'node_name: {node_name}')
+    logging.info(f'reprocess: {reprocess}')
+    logging.info(f'num_heads: {num_heads}')
+    logging.info(f'depth: {depth}')
+
+    print(f'Started with following system variables:')
+    print(f'{sys.argv}')
+    print(f'node_name: {node_name}')
+    print(f'reprocess: {reprocess}')
+    print(f'num_heads: {num_heads}')
+    print(f'depth: {depth}')
+
+    # ---------------------- End Logging Framework ----------------------
+
+
+
+    experiment_number = 0
     f = open('trial_tracker.txt', 'r+')
     attempt_num = int(f.readline())
 
@@ -1017,18 +1108,24 @@ if __name__ == "__main__":
     f.writelines(f'{attempt_num + 1}\n')
     f.close()
 
-    process_data()
-    code = '5RW2'
 
-    # given = np.load(f'PDBs/processed_data/train/{code}-sample.npy', mmap_mode='r', allow_pickle=True)
-    # target = np.load(f'PDBs/processed_data/train/{code}-target.npy', mmap_mode='r', allow_pickle=True)
-    #
-    # print(f'target shape: {target.shape}')
-    # print(f'given second: {target[81:150, -5:]}')
-    # # Fourth column: Whether we know or don't know position
-    # # Fifth column: Whether we should know the position or not (does the atom exist in the amino or not)
-    #
-    # # output_len = 27 * (90) (there are 27 atoms which we stack into a single row)
+    start = time.time()
+    if reprocess.lower() == 't':
+        logging.warning(f' ------------------------- Beginning Parsing Sequences ------------------------- ')
+        a = parse_seq.Sequence_Parser(max_samples=data_size)
+        # a.parse_names(['6XTB'])
+        print(a.e.encode)
+        a.RAM_Efficient_parsing(batch_size=10)
+        # a.open_struct('6XTB')
+
+        # logging.info(f'Took {time.time() - start} seconds!!!')
+        logging.warning(f'Complete! Took {time.time() - start} seconds!!!')
+
+        logger.warning(' --------------------------------- Begin Processing Data ---------------------------------------- ')
+
+        process_data(max_proteins=data_size)
+
+    logger.warning(' --------------------------------- Begin Transformer ---------------------------------------- ')
     output_len = 2430
 
     train_seq = np.load('PDBs/big_data/in-train.npy', mmap_mode='r', allow_pickle=True)
@@ -1045,7 +1142,7 @@ if __name__ == "__main__":
 
     pdb_dir = "path_to_pdbs"
     dataset = ProteinStructureDataset(pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device)
-    model = ProteinStructurePredictor(embed_dim=esm_model.embed_dim, depth=4, num_heads=8, mlp_ratio=4.0)
+    model = ProteinStructurePredictor(embed_dim=esm_model.embed_dim, depth=depth, num_heads=num_heads, mlp_ratio=4.0)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     criterion = RMSDLoss()
@@ -1091,8 +1188,8 @@ if __name__ == "__main__":
 
 
 
-    train_model(model, dataset, criterion, optimizer, epochs=10, batch_size=3, shuffle=True, device=device,
-                print_interval=50)
+    train_model(model, dataset, criterion, optimizer, epochs=100000, batch_size=10, shuffle=True, device=device,
+                print_interval=50, save_after=100, save_loc=f'models/{node_name}/Save')
 
     # Run a single example to evaluate our predictions!
     # Just make sure it produces something reasonable.
@@ -1100,7 +1197,7 @@ if __name__ == "__main__":
     model.eval()
     model.to(device)
 
-    dataloader = DataLoader(dataset, batch_size=3, shuffle=True, collate_fn=custom_collate_fn_two)
+    dataloader = DataLoader(dataset, batch_size=10, shuffle=True, collate_fn=custom_collate_fn_two)
     for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
         coords_true = coords_true.to(device)
         seq_emb = seq_emb.to(device)
@@ -1149,8 +1246,10 @@ if __name__ == "__main__":
         print(f'pred: {p}')
         print()
 
+    logging.info(f'Complete!!! Took {time.time() - start} seconds!!')
+    torch.save(model, f'models/model-FINISHED-{node_name}-{attempt_num}')
+    logging.info(f'Saved model successfully!')
 
-    torch.save(model, f'models/model-{attempt_num}')
 
     # Example code for if we want to turn off the gradient of our undefined input
     # def get_hook(param_idx):
@@ -1162,3 +1261,7 @@ if __name__ == "__main__":
     #               grad[i] = 0
     #       return grad
     #   return hook
+
+
+
+    # System arguments: Node name, reprocess, data size!
