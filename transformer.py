@@ -477,9 +477,17 @@ class ProteinStructureDataset(Dataset):
         self.batch_size = batch_size
         self.num_batches = num_training // self.batch_size
         # print(f'self starts: {self.starts}')
-        # self.random_seq = torch.randint(self.starts.shape[0], (self.batch_size,))
-        # print(f'self random seq: {self.random_seq}')
-        # self.batches = torch.split(self.random_seq, self.batch_size)
+        self.update_batches()
+
+    def update_batches(self):
+        self.random_seq = torch.randint(self.starts.shape[0], (self.starts.shape[0],))
+        # indices = np.linspace(0, self.starts.shape[0])
+        indices = np.arange(0, self.starts.shape[0], step=1)
+        np.random.shuffle(indices)
+        # print(f'indices: {indices}')
+        # print(f'batch size: {self.batch_size}')
+        self.batches = torch.split(torch.from_numpy(indices), self.batch_size)
+        # print(f'self.batches: {self.batches}')
 
     def __len__(self):
         return num_training
@@ -488,48 +496,50 @@ class ProteinStructureDataset(Dataset):
         return self
 
     def __next__(self):
-        # print(f'getting item...')
-        # print(f'code: {self.pdb_files[idx]}')
-        # pdb_path = f'PDBs/processed_data/train/{self.pdb_files[idx]}'
-        #
-        #
-        # # pdb_path = os.path.join(self.pdb_dir, self.pdb_files[idx])
-        # seq, coords = self.get_sequence_and_coords(pdb_path)
-        # seq = str(seq)
-        #
-        # # Obtain ESM embeddings for the raw sequence length
-        # batch = [("protein", seq)]
-        # _, _, tokens = self.esm_batch_converter(batch)
-        # tokens = tokens.to(next(self.esm_model.parameters()).device)
-        # with torch.no_grad():
-        #     results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
-        # # Exclude CLS token
-        # esm_emb = results["representations"][self.esm_model.num_layers][0, 1:len(seq)+1, :]
-        # # print(f'esm_emb shape: {esm_emb.shape}')
-        # # print(f'coords shape: {coords.shape}')
-        #
-        # # No padding/truncation here. Just return raw.
-
-
-
-        x, t = self.get_batch(self.train_seq, self.train_tar, self.block_size, self.batch_size, self.device, self.traversed)
-
-
-        # print(f'x prev shape: {x.shape}')
-        x = self.to_embedding(x)
-        # print(f'x new shape: {x.shape}')
-        print(f'train seq: {x.shape}')
-        print(f'train tar: {t.shape}')
-        print(f'num batches: {self.num_batches}')
-
-        self.traversed += 1
         if self.traversed >= self.num_batches:
-            # self.random_seq = torch.randint(self.starts.shape[0], (self.batch_size,))
+            self.update_batches()
             self.traversed = 0
             raise StopIteration
+        else:
+
+            # print(f'getting item...')
+            # print(f'code: {self.pdb_files[idx]}')
+            # pdb_path = f'PDBs/processed_data/train/{self.pdb_files[idx]}'
+            #
+            #
+            # # pdb_path = os.path.join(self.pdb_dir, self.pdb_files[idx])
+            # seq, coords = self.get_sequence_and_coords(pdb_path)
+            # seq = str(seq)
+            #
+            # # Obtain ESM embeddings for the raw sequence length
+            # batch = [("protein", seq)]
+            # _, _, tokens = self.esm_batch_converter(batch)
+            # tokens = tokens.to(next(self.esm_model.parameters()).device)
+            # with torch.no_grad():
+            #     results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
+            # # Exclude CLS token
+            # esm_emb = results["representations"][self.esm_model.num_layers][0, 1:len(seq)+1, :]
+            # # print(f'esm_emb shape: {esm_emb.shape}')
+            # # print(f'coords shape: {coords.shape}')
+            #
+            # # No padding/truncation here. Just return raw.
 
 
-        return x, t
+
+            x, t = self.get_batch(self.train_seq, self.train_tar, self.block_size, self.batch_size, self.device, self.traversed)
+
+
+            # print(f'x prev shape: {x.shape}')
+            x = self.to_embedding(x)
+            # print(f'x new shape: {x.shape}')
+            # print(f'train seq: {x.shape}')
+            # print(f'train tar: {t.shape}')
+            # print(f'num batches: {self.num_batches}')
+
+            self.traversed += 1
+
+
+            return x, t
 
 
     def get_batch(self, seq, tar, block_size, batch_size, device, traversed):
@@ -551,8 +561,10 @@ class ProteinStructureDataset(Dataset):
         # print(f'possible start pos: {start_pos}')
         # print(f'seq: {seq}')
         # ix = torch.randint(seq.shape[0] - block_size, (batch_size,))
-        starts = torch.randint(self.starts.shape[0], (self.batch_size,))
-        # print(f'random seq: {self.batches}')
+        # starts = torch.randint(self.starts.shape[0], (self.batch_size,))
+        starts = self.batches[traversed]
+
+        # print(f'random seq: {starts}')
         # starts = self.random_seq[(batch_size * traversed):(batch_size * (traversed + 1))]
         # print(f'starts: {starts}')
         # print(f'starts: {self.starts}')
@@ -853,6 +865,7 @@ def train_model(model,
     for epoch in range(epochs):
         epoch_loss = 0.0
         for batch_idx, (seq_emb, coords_true) in enumerate(dataset):
+            # print(f'something returned')
             # print(f'seq_emb shape: {seq_emb.shape}')
             # print(f'coord_true sha: {coords_true.shape}')
             # print(f'coord_true: {coords_true[5, 50:55, 87]}')
