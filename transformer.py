@@ -16,7 +16,7 @@ import torch
 esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
 esm_batch_converter = esm_alphabet.get_batch_converter()
 
-block_size = 300
+block_size = 109
 num_training = 0
 
 
@@ -120,8 +120,6 @@ class protein_unifier():
         batch = [("protein", seq)]
         _, _, tokens = esm_batch_converter(batch)
         sequence = tokens[0, :].numpy()
-        # sequence = sequence.T
-
 
         if self.in_file is None:
             self.in_file = sequence
@@ -136,8 +134,8 @@ class protein_unifier():
 
     def save(self, name):
         # Name should be XXX.bin
-        print(f'in: {self.in_file}')
-        print(f'out: {self.out_file[50, 85:90]}')
+        # print(f'in: {self.in_file}')
+        # print(f'out: {self.out_file[50, 85:90]}')
 
 
         np.save(f'{self.save_path}in-{name}', allow_pickle=True, arr=self.in_file)
@@ -178,7 +176,7 @@ def format_sample(target, pad=False):
         PAD[:, 84] = 1
         # t is our new target
         if pad:
-            t = np.vstack([BOS_row, target[:sequence_length - 2], EOS_row, PAD])
+            t = np.vstack([BOS_row, target[:sequence_length - 2], PAD, EOS_row])
         else:
             t = np.vstack([BOS_row, target[:sequence_length - 2], PAD, EOS_row])
     else:
@@ -199,6 +197,7 @@ def stack_atoms(target):
     N, M = target.shape
     reshaped_target = target.reshape(N // 27, 27, M)  # Split into groups of 27 rows
     stacked_target = reshaped_target.reshape(N // 27, M * 27)
+    # stacked_target = reshaped_target.transpose(0, 2, 1).reshape(N // 27, M * 27)
     # print(f'stacked: {stacked_target.shape}')
     return stacked_target
 
@@ -236,7 +235,7 @@ def format_input(target, pad=False):
         padding = PAD * (sequence_length - len(target) - 2)
         # t is our new target
         if pad:
-            t = BOS + target[:sequence_length - 2] + EOS + padding
+            t = BOS + target[:sequence_length - 2] + padding + EOS
         else:
             t = BOS + target[:sequence_length - 2] + EOS
     else:
@@ -264,9 +263,13 @@ def process_data():
     random.shuffle(code_set)
     print(f'all names: {code_set}')
     # make our train-test split
-    train_codes = code_set[:int(len(code_set) * 0.8)]
-    valid_codes = code_set[int(len(code_set) * 0.8):int(len(code_set) * 0.9)]
-    test_codes = code_set[int(len(code_set) * 0.9):]
+    # train_codes = code_set[:int(len(code_set) * 0.8)]
+    # valid_codes = code_set[int(len(code_set) * 0.8):int(len(code_set) * 0.9)]
+    # test_codes = code_set[int(len(code_set) * 0.9):]
+
+    train_codes = code_set[:]
+    valid_codes = []
+    test_codes = []
 
     # Saves processed data into proteins_cleaned under test, train, and valid
     pu = protein_unifier()
@@ -467,11 +470,16 @@ class ProteinStructureDataset(Dataset):
         self.traversed = 0
 
         self.starts = np.where(self.train_seq == 0)[0]
+
         print(f'num training: {num_training}')
 
     def set_batch_size(self, batch_size):
         self.batch_size = batch_size
         self.num_batches = num_training // self.batch_size
+        # print(f'self starts: {self.starts}')
+        # self.random_seq = torch.randint(self.starts.shape[0], (self.batch_size,))
+        # print(f'self random seq: {self.random_seq}')
+        # self.batches = torch.split(self.random_seq, self.batch_size)
 
     def __len__(self):
         return num_training
@@ -503,13 +511,20 @@ class ProteinStructureDataset(Dataset):
         # # No padding/truncation here. Just return raw.
 
 
-        x, t = self.get_batch(self.train_seq, self.train_tar, self.block_size, self.batch_size, self.device)
-        print(f'x prev shape: {x.shape}')
+
+        x, t = self.get_batch(self.train_seq, self.train_tar, self.block_size, self.batch_size, self.device, self.traversed)
+
+
+        # print(f'x prev shape: {x.shape}')
         x = self.to_embedding(x)
-        print(f'x new shape: {x.shape}')
+        # print(f'x new shape: {x.shape}')
+        print(f'train seq: {x.shape}')
+        print(f'train tar: {t.shape}')
+        print(f'num batches: {self.num_batches}')
 
         self.traversed += 1
         if self.traversed >= self.num_batches:
+            # self.random_seq = torch.randint(self.starts.shape[0], (self.batch_size,))
             self.traversed = 0
             raise StopIteration
 
@@ -517,7 +532,7 @@ class ProteinStructureDataset(Dataset):
         return x, t
 
 
-    def get_batch(self, seq, tar, block_size, batch_size, device):
+    def get_batch(self, seq, tar, block_size, batch_size, device, traversed):
         """
             Return a minibatch of data. This function is not deterministic.
             Calling this function multiple times will result in multiple different
@@ -536,18 +551,29 @@ class ProteinStructureDataset(Dataset):
         # print(f'possible start pos: {start_pos}')
         # print(f'seq: {seq}')
         # ix = torch.randint(seq.shape[0] - block_size, (batch_size,))
-        starts = torch.randint(self.starts.shape[0], (batch_size,))
-        print(f'starts: {self.starts}')
+        starts = torch.randint(self.starts.shape[0], (self.batch_size,))
+        # print(f'random seq: {self.batches}')
+        # starts = self.random_seq[(batch_size * traversed):(batch_size * (traversed + 1))]
+        # print(f'starts: {starts}')
+        # print(f'starts: {self.starts}')
+        # print(f'starts: {starts}')
         ix = self.starts[starts]
+        # print(f'ix: {ix}')
         # pick from a random start position!
-        print(f'seq size: {seq.shape}')
+        # print(f'seq size: {seq.shape}')
         x = torch.stack([torch.from_numpy((seq[i:i + block_size])) for i in ix])
         t = torch.stack([torch.from_numpy((tar[i:i + block_size, :])) for i in ix])
-        print(f'x: {x.shape}')
-        print(f't: {t.shape}')
-        print(f'ix: {ix}')
-        print(f'x: {x[0, 0:5]}')
-        print(f't: {t[0, 0:5, 82:90]}')
+        # print(f'x: {x.shape}')
+        # print(f't: {t.shape}')
+        # print(f'ix: {ix}')
+        # print(f'x: {x[1, 100:110]}')
+        # for i in range(27):
+        #     # print(f'i {i}')
+        #     print(f't: {t[1, 107, (90 * i +82):(90 * i + 90)]}')
+            # print()
+        # print()
+        # print()
+
         # print(f'tar shape: {tar.shape}')
         # print(f't shape: {t[5, 50:55, 87]}')
         # print(f'x batch shape: {x.shape}')
@@ -872,13 +898,14 @@ def unstack(coords):
   N = N * 27
   M = M // 27
   coords = coords.detach().numpy()
-  reshaped_parts = coords.reshape(N // 27, 27, M)
+  reshaped_parts = coords.reshape(N // 27, M, 27)
+  original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
 
   # How we stack:
   # reshaped_target = target.reshape(N // 27, 27, M)  # Split into groups of 27 rows
   # stacked_target = reshaped_target.reshape(N // 27, M * 27)
   # original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
-  return reshaped_parts
+  return original_array
 
 
 
@@ -960,7 +987,7 @@ if __name__ == "__main__":
 
 
 
-    train_model(model, dataset, criterion, optimizer, epochs=100, batch_size=2, shuffle=True, device=device,
+    train_model(model, dataset, criterion, optimizer, epochs=1000, batch_size=2, shuffle=True, device=device,
                 print_interval=50)
 
     # Run a single example to evaluate our predictions!
@@ -974,6 +1001,8 @@ if __name__ == "__main__":
         seq_emb = seq_emb.to(device)
         coords_pred = model(seq_emb)
         break
+
+    print(f'seq_emb: {seq_emb.shape}')
 
     # seq_emb = seq_emb.to(device)  # [B, L, D]
     #             coords_true = coords_true.to(device)  # [B, L, 3]
