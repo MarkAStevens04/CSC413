@@ -11,7 +11,7 @@ import numpy as np
 import random
 from torch.utils.data import DataLoader
 import torch
-random.seed(777)
+# random.seed(777)
 
 
 
@@ -113,6 +113,9 @@ class protein_unifier():
         self.in_file.tofile(f'{self.save_path}in-{name}.bin')
         self.out_file.tofile(f'{self.save_path}out-{name}.bin')
 
+    def __repr__(self):
+        msg = 'PROTEIN UNIFIER: \n' + f'total accumulated sequence length: {len(self.in_file)} \n' + f'total accumulated protein  length: {self.out_file.shape} \n'
+        return msg
 
 
 
@@ -207,7 +210,7 @@ def format_input(target, pad=False):
 def process_data():
     open_dir = 'PDBs/pre_processed_data'
     save_dir = 'PDBs/processed_data'
-    pu = protein_unifier()
+
     os.makedirs(save_dir, exist_ok=True)
     os.makedirs(os.path.join(save_dir, 'train'), exist_ok=True)
     os.makedirs(os.path.join(save_dir, 'valid'), exist_ok=True)
@@ -225,7 +228,7 @@ def process_data():
     test_codes = code_set[int(len(code_set) * 0.9):]
 
     # Saves processed data into proteins_cleaned under test, train, and valid
-
+    pu = protein_unifier()
     for code in train_codes:
         given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
         target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
@@ -248,15 +251,16 @@ def process_data():
         # print(f'given after formatting: {len(g)}')
         # print(f'target after formatting: {t.shape}')
         pu.add_protein(g, t)
-
+    # print(pu)
     pu.save('train')
 
-
+    pu = protein_unifier()
     for code in valid_codes:
         given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
         target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
 
-        print(f'given: {given}')
+        # print(f'code: {code}')
+        # print(f'given: {given}')
 
         # process data
         onehot_target = one_hot_encode_column(target, 0, 85)
@@ -266,7 +270,16 @@ def process_data():
         # save input-output pair
         np.save(os.path.join(save_dir, 'valid', f'{code}-sample.npy'), given)
         np.save(os.path.join(save_dir, 'valid', f'{code}-target.npy'), target)
+        g = format_input(given, pad=True)
+        t = stack_atoms(onehot_target)
+        t = format_sample(t, pad=True)
+        # print(f'given after formatting: {len(g)}')
+        # print(f'target after formatting: {t.shape}')
+        pu.add_protein(g, t)
+    # print(pu)
+    pu.save('valid')
 
+    pu = protein_unifier()
     for code in test_codes:
         given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
         target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
@@ -281,6 +294,14 @@ def process_data():
         # save input-output pair
         np.save(os.path.join(save_dir, 'test', f'{code}-sample.npy'), given)
         np.save(os.path.join(save_dir, 'test', f'{code}-target.npy'), target)
+        g = format_input(given, pad=True)
+        t = stack_atoms(onehot_target)
+        t = format_sample(t, pad=True)
+        # print(f'given after formatting: {len(g)}')
+        # print(f'target after formatting: {t.shape}')
+        pu.add_protein(g, t)
+    # print(pu)
+    pu.save('test')
 
 
 
