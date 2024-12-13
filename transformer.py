@@ -126,25 +126,30 @@ class protein_unifier():
     """
     "Unifies" the proteins and appends into a single file
     """
-    def __init__(self, num_looking):
+    def __init__(self, num_looking, name='train'):
         self.in_file = None
         self.out_file = None
         self.save_path = 'PDBs/big_data/tests/'
         self.num_looking = num_looking
         self.track = 0
+        self.chunk_size = 10
+        self.name = name
 
     def add_protein(self, sequence, protein):
 
         if self.out_file is None:
-            self.out_file = np.zeros((protein.shape[0] * self.num_looking, protein.shape[1]))
-            self.out_file[self.track:self.track + protein.shape[0], :] = protein
-            self.track += 1
+            # self.out_file = np.zeros((protein.shape[0] * self.num_looking, protein.shape[1]))
+            # self.out_file = np.save(, allow_pickle=True, arr=self.out_file)
+            self.out_file = np.memmap(f'{self.save_path}out-{self.name}', dtype='float32', mode='w+', shape=(protein.shape[0] * self.num_looking, protein.shape[1]))
+            self.out_file[:protein.shape[0], :] = protein
+
             # self.out_file = protein
             # print(f'out shape: {self.out_file.shape}, pshape: {protein.shape}')
+
         else:
             # self.out_file = np.vstack([self.out_file, protein])
             self.out_file[(self.track) * protein.shape[0]:(self.track + 1) * protein.shape[0], :] = protein
-            self.track += 1
+
             # print(f'out shape: {self.out_file.shape}, pshape: {protein.shape}')
 
         # tokenize our sequence before saving!
@@ -167,9 +172,16 @@ class protein_unifier():
         sequence = tokens[0, :].numpy()
 
         if self.in_file is None:
-            self.in_file = sequence
+            # self.in_file = sequence
+            print(f'sequence shape: {sequence.shape}')
+            self.in_file = np.memmap(f'{self.save_path}in-{self.name}', dtype='int', mode='w+',
+                                      shape=(sequence.shape[0] * self.num_looking,))
+            self.in_file[:sequence.shape[0]] = sequence
+            self.track += 1
         else:
-            self.in_file = np.hstack([self.in_file, sequence])
+            # self.in_file = np.hstack([self.in_file, sequence])
+            self.in_file[(self.track) * sequence.shape[0]:(self.track + 1) * sequence.shape[0]] = sequence
+            self.track += 1
 
 
         # If our current step is not the same as our sequence...
@@ -188,9 +200,16 @@ class protein_unifier():
         # for t, i in enumerate(self.out_file):
         #     print(f'line {t}: {i[85:90]}')
 
+        for t, i in enumerate(self.in_file):
+            print(f'line {t}: {i}')
+
 
         np.save(f'{self.save_path}in-{name}', allow_pickle=True, arr=self.in_file)
         np.save(f'{self.save_path}out-{name}', allow_pickle=True, arr=self.out_file)
+
+        # just closes the output file!
+        del self.out_file
+        del self.in_file
 
     def __repr__(self):
         msg = 'PROTEIN UNIFIER: \n' + f'total accumulated sequence length: {len(self.in_file)} \n' + f'total accumulated protein  length: {self.out_file.shape} \n'
@@ -327,7 +346,7 @@ def process_data(max_proteins=1000):
     test_codes = []
 
     # Saves processed data into proteins_cleaned under test, train, and valid
-    pu = protein_unifier(len(train_codes))
+    pu = protein_unifier(len(train_codes), name='train')
     for i, code in enumerate(train_codes):
         print(f'Saved one! {code} {round(((i / len(train_codes)) * 100), 2)}')
         given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
@@ -358,7 +377,7 @@ def process_data(max_proteins=1000):
     # print(pu)
     pu.save('train')
 
-    pu = protein_unifier(len(valid_codes))
+    pu = protein_unifier(len(valid_codes), name='valid')
     for code in valid_codes:
         given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
         target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
@@ -383,7 +402,7 @@ def process_data(max_proteins=1000):
     # print(pu)
     pu.save('valid')
 
-    pu = protein_unifier(len(test_codes))
+    pu = protein_unifier(len(test_codes), name='test')
     for code in test_codes:
         given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
         target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
