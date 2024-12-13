@@ -22,7 +22,7 @@ esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
 esm_batch_converter = esm_alphabet.get_batch_converter()
 
 block_size = 1000
-num_training = 800
+num_training = 2
 
 
 logger = logging.getLogger(__name__)
@@ -128,17 +128,26 @@ class protein_unifier():
     """
     "Unifies" the proteins and appends into a single file
     """
-    def __init__(self):
+    def __init__(self, num_looking):
         self.in_file = None
         self.out_file = None
-        self.save_path = 'PDBs/big_data/tests'
+        self.save_path = 'PDBs/big_data/tests/'
+        self.num_looking = num_looking
+        self.track = 0
 
     def add_protein(self, sequence, protein):
-        if self.out_file is None:
-            self.out_file = protein
-        else:
-            self.out_file = np.vstack([self.out_file, protein])
 
+        if self.out_file is None:
+            self.out_file = np.zeros((protein.shape[0] * self.num_looking, protein.shape[1]))
+            self.out_file[self.track:self.track + protein.shape[0], :] = protein
+            self.track += 1
+            # self.out_file = protein
+            # print(f'out shape: {self.out_file.shape}, pshape: {protein.shape}')
+        else:
+            # self.out_file = np.vstack([self.out_file, protein])
+            self.out_file[(self.track) * protein.shape[0]:(self.track + 1) * protein.shape[0], :] = protein
+            self.track += 1
+            # print(f'out shape: {self.out_file.shape}, pshape: {protein.shape}')
 
         # tokenize our sequence before saving!
         seq = ''
@@ -165,10 +174,11 @@ class protein_unifier():
             self.in_file = np.hstack([self.in_file, sequence])
 
 
-        if self.out_file.shape[0] != len(self.in_file):
+        # If our current step is not the same as our sequence...
+        if (self.track * protein.shape[0]) != len(self.in_file):
             print(f'input and output files are out of sync!')
             print(f'in_file shape: {len(self.in_file)}')
-            print(f'out_file shape: {self.out_file.shape}')
+            print(f'out_file shape: {(self.track * protein.shape[0])}')
             logging.warning(f'input and output files are out of sync')
             logging.info(f'in_file shape: {len(self.in_file)}')
             logging.info(f'out_file shape: {self.out_file.shape}')
@@ -177,6 +187,8 @@ class protein_unifier():
         # Name should be XXX.bin
         # print(f'in: {self.in_file}')
         # print(f'out: {self.out_file[50, 85:90]}')
+        # for t, i in enumerate(self.out_file):
+        #     print(f'line {t}: {i[85:90]}')
 
 
         np.save(f'{self.save_path}in-{name}', allow_pickle=True, arr=self.in_file)
@@ -302,9 +314,10 @@ def process_data(max_proteins=1000):
 
     # Get set of protein codes we have already pre-processed
     code_set = {name[:4] for name in os.listdir(open_dir)}
-    code_set = list(code_set)[:max_proteins]
+    code_set = list(code_set)
     # randomize
     random.shuffle(code_set)
+    code_set = code_set[:max_proteins]
     print(f'all names: {code_set}')
     # make our train-test split
     # train_codes = code_set[:int(len(code_set) * 0.8)]
@@ -316,7 +329,7 @@ def process_data(max_proteins=1000):
     test_codes = []
 
     # Saves processed data into proteins_cleaned under test, train, and valid
-    pu = protein_unifier()
+    pu = protein_unifier(len(train_codes))
     for i, code in enumerate(train_codes):
         print(f'Saved one! {code} {round(((i / len(train_codes)) * 100), 2)}')
         given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
@@ -342,12 +355,12 @@ def process_data(max_proteins=1000):
         # print(f'given after formatting: {len(g)}')
         # print(f'target after formatting: {t.shape}')
         pu.add_protein(g, t)
-        global num_training
-        num_training += 1
+        # global num_training
+        # num_training += 1
     # print(pu)
     pu.save('train')
 
-    pu = protein_unifier()
+    pu = protein_unifier(len(valid_codes))
     for code in valid_codes:
         given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
         target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
@@ -372,7 +385,7 @@ def process_data(max_proteins=1000):
     # print(pu)
     pu.save('valid')
 
-    pu = protein_unifier()
+    pu = protein_unifier(len(test_codes))
     for code in test_codes:
         given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
         target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
@@ -1203,7 +1216,7 @@ if __name__ == "__main__":
 
 
 
-    train_model(model, dataset, criterion, optimizer, epochs=10000, batch_size=2, shuffle=True, device=device,
+    train_model(model, dataset, criterion, optimizer, epochs=100, batch_size=2, shuffle=True, device=device,
                 print_interval=50, save_after=100, save_loc=f'models/{node_name}/Save')
 
     # Run a single example to evaluate our predictions!
