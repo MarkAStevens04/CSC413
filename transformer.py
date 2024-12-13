@@ -33,7 +33,7 @@ def setup(node_name=None):
     logging.info(f'Setting up...')
     os.makedirs(f'PDBs', exist_ok=True)
     os.makedirs(f'PDBs/all', exist_ok=True)
-    os.makedirs(f'PDBs/big_data', exist_ok=True)
+    os.makedirs(f'PDBs/big_data/tests', exist_ok=True)
     os.makedirs(f'PDBs/pre_processed_data', exist_ok=True)
     os.makedirs(f'PDBs/processed_data', exist_ok=True)
 
@@ -131,7 +131,7 @@ class protein_unifier():
     def __init__(self):
         self.in_file = None
         self.out_file = None
-        self.save_path = 'PDBs/big_data/'
+        self.save_path = 'PDBs/big_data/tests'
 
     def add_protein(self, sequence, protein):
         if self.out_file is None:
@@ -307,13 +307,13 @@ def process_data(max_proteins=1000):
     random.shuffle(code_set)
     print(f'all names: {code_set}')
     # make our train-test split
-    train_codes = code_set[:int(len(code_set) * 0.8)]
-    valid_codes = code_set[int(len(code_set) * 0.8):int(len(code_set) * 0.9)]
-    test_codes = code_set[int(len(code_set) * 0.9):]
+    # train_codes = code_set[:int(len(code_set) * 0.8)]
+    # valid_codes = code_set[int(len(code_set) * 0.8):int(len(code_set) * 0.9)]
+    # test_codes = code_set[int(len(code_set) * 0.9):]
 
-    # train_codes = code_set[:]
-    # valid_codes = []
-    # test_codes = []
+    train_codes = code_set[:]
+    valid_codes = []
+    test_codes = []
 
     # Saves processed data into proteins_cleaned under test, train, and valid
     pu = protein_unifier()
@@ -916,15 +916,25 @@ class RMSDLoss(nn.Module):
     def forward(self, pred_coords, true_coords):
         # Create a mask to ignore padded regions
         mask = (true_coords.sum(dim=-1) != 0)  # Assuming padded coords are all zeros
+        # print(f'mask shape: {mask.shape}')
+        # mask shape: torch.Size([10, 1000])
+        # print(f'mask: {mask}')
 
         # torch.Size([2, 463, 2430])
         # pred_coords has size (batch, block, output)
         # print(f'pred coords: {pred_coords.shape}')
         # print(f'true coords: {true_coords.shape}')
+        # print(f'pred first: {pred_coords[1, 900, 85:90]}')
+        # print(f'true first: {true_coords[1, 900, 85:90]}')
 
         # Apply the mask to both predicted and true coordinates
         pred_coords_masked = pred_coords[mask]
         true_coords_masked = true_coords[mask]
+
+        # print(f'pred second: {pred_coords[1, 900, 85:90]}')
+        # print(f'true second: {true_coords[1, 900, 85:90]}')
+        # print()
+
 
         # Calculate RMSD only on the masked coordinates
         diff = pred_coords_masked - true_coords_masked
@@ -1022,21 +1032,25 @@ def train_model(model,
 
 
 def unstack(coords):
-  """
-  Unstacks the coordinates
-  """
-  N, M = coords.shape
-  N = N * 27
-  M = M // 27
-  coords = coords.detach().numpy()
-  reshaped_parts = coords.reshape(N // 27, M, 27)
-  original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
+    """
+    Unstacks the coordinates
+    """
+    N, M = coords.shape
+    N = N * 27
+    M = M // 27
+    coords = coords.detach().numpy()
+    # reshaped_parts = coords.reshape(N // 27, 27, M)
+    # original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
 
-  # How we stack:
-  # reshaped_target = target.reshape(N // 27, 27, M)  # Split into groups of 27 rows
-  # stacked_target = reshaped_target.reshape(N // 27, M * 27)
-  # original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
-  return original_array
+    reshaped_parts = coords.reshape(N // 27, 27, M)
+    # original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
+
+    # How we stack:
+    # reshaped_target = target.reshape(N // 27, 27, M)  # Split into groups of 27 rows
+    # stacked_target = reshaped_target.reshape(N // 27, M * 27)
+    # original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
+    # return original_array
+    return reshaped_parts
 
 
 
@@ -1060,7 +1074,7 @@ if __name__ == "__main__":
     else:
         node_name = 'Default'
         reprocess = 't'
-        data_size = 10
+        data_size = 2
         num_heads = 8
         depth = 4
 
@@ -1108,6 +1122,7 @@ if __name__ == "__main__":
     f.writelines(f'{attempt_num + 1}\n')
     f.close()
 
+    # num_training = 0
 
     start = time.time()
     if reprocess.lower() == 't':
@@ -1123,13 +1138,13 @@ if __name__ == "__main__":
 
         logger.warning(' --------------------------------- Begin Processing Data ---------------------------------------- ')
 
-        process_data(max_proteins=data_size)
+    process_data(max_proteins=data_size)
 
     logger.warning(' --------------------------------- Begin Transformer ---------------------------------------- ')
     output_len = 2430
 
-    train_seq = np.load('PDBs/big_data/in-train.npy', mmap_mode='r', allow_pickle=True)
-    train_tar = np.load('PDBs/big_data/out-train.npy', mmap_mode='r', allow_pickle=True)
+    train_seq = np.load('PDBs/big_data/tests/in-train.npy', mmap_mode='r', allow_pickle=True)
+    train_tar = np.load('PDBs/big_data/tests/out-train.npy', mmap_mode='r', allow_pickle=True)
 
     print(f'train_seq: {train_seq.shape}')
 
@@ -1188,7 +1203,7 @@ if __name__ == "__main__":
 
 
 
-    train_model(model, dataset, criterion, optimizer, epochs=100000, batch_size=10, shuffle=True, device=device,
+    train_model(model, dataset, criterion, optimizer, epochs=10000, batch_size=2, shuffle=True, device=device,
                 print_interval=50, save_after=100, save_loc=f'models/{node_name}/Save')
 
     # Run a single example to evaluate our predictions!
@@ -1241,10 +1256,18 @@ if __name__ == "__main__":
     #     print(f'pred: {p}')
     #     print()
 
-    for t, p in zip(unstacked_true[50:100, -5:], unstacked_pred[50:100, -5:]):
-        print(f'true: {t}')
-        print(f'pred: {p}')
+    # for t, p in zip(unstacked_true[50:100, -5:], unstacked_pred[50:100, -5:]):
+    #     print(f'true: {t}')
+    #     print(f'pred: {p}')
+    #     print()
+
+    for i in range(5):
+        for t, p in zip(unstacked_true[i, :, -5:], unstacked_pred[i, :, -5:]):
+            print(f'true: {t}')
+            print(f'pred: {p}')
+            print()
         print()
+
 
     logging.info(f'Complete!!! Took {time.time() - start} seconds!!')
     torch.save(model, f'models/model-FINISHED-{node_name}-{attempt_num}')
