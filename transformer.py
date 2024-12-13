@@ -22,7 +22,6 @@ esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
 esm_batch_converter = esm_alphabet.get_batch_converter()
 
 block_size = 1000
-num_training = 2
 
 
 logger = logging.getLogger(__name__)
@@ -35,7 +34,6 @@ def setup(node_name=None):
     os.makedirs(f'PDBs/all', exist_ok=True)
     os.makedirs(f'PDBs/big_data/tests', exist_ok=True)
     os.makedirs(f'PDBs/pre_processed_data', exist_ok=True)
-    os.makedirs(f'PDBs/processed_data', exist_ok=True)
 
 
     if node_name is not None:
@@ -568,7 +566,7 @@ def get_batch(seq, tar, block_size, batch_size, device):
 # Adjust your dataset so that it no longer pads/truncates sequences.
 # Return raw esm_emb and coords at their natural length.
 class ProteinStructureDataset(Dataset):
-    def __init__(self, pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device):
+    def __init__(self, pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device, num_training):
         self.pdb_dir = pdb_dir
         self.esm_model = esm_model
         self.esm_batch_converter = esm_batch_converter
@@ -580,12 +578,13 @@ class ProteinStructureDataset(Dataset):
         self.traversed = 0
 
         self.starts = np.where(self.train_seq == 0)[0]
+        self.num_training = num_training
 
         print(f'num training: {num_training}')
 
     def set_batch_size(self, batch_size):
         self.batch_size = batch_size
-        self.num_batches = num_training // self.batch_size
+        self.num_batches = self.num_training // self.batch_size
         # print(f'self starts: {self.starts}')
         self.update_batches()
 
@@ -600,7 +599,7 @@ class ProteinStructureDataset(Dataset):
         # print(f'self.batches: {self.batches}')
 
     def __len__(self):
-        return num_training
+        return self.num_training
 
     def __iter__(self):
         return self
@@ -1135,7 +1134,7 @@ if __name__ == "__main__":
     f.writelines(f'{attempt_num + 1}\n')
     f.close()
 
-    # num_training = 0
+
 
     start = time.time()
     if reprocess.lower() == 't':
@@ -1169,7 +1168,7 @@ if __name__ == "__main__":
     esm_model = esm_model.to(device)
 
     pdb_dir = "path_to_pdbs"
-    dataset = ProteinStructureDataset(pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device)
+    dataset = ProteinStructureDataset(pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device, num_training=data_size)
     model = ProteinStructurePredictor(embed_dim=esm_model.embed_dim, depth=depth, num_heads=num_heads, mlp_ratio=4.0)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
@@ -1216,7 +1215,7 @@ if __name__ == "__main__":
 
 
 
-    train_model(model, dataset, criterion, optimizer, epochs=100, batch_size=2, shuffle=True, device=device,
+    train_model(model, dataset, criterion, optimizer, epochs=1000, batch_size=2, shuffle=True, device=device,
                 print_interval=50, save_after=100, save_loc=f'models/{node_name}/Save')
 
     # Run a single example to evaluate our predictions!
