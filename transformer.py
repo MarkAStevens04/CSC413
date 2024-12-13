@@ -173,7 +173,7 @@ class protein_unifier():
 
         if self.in_file is None:
             # self.in_file = sequence
-            print(f'sequence shape: {sequence.shape}')
+            # print(f'sequence shape: {sequence.shape}')
             self.in_file = np.memmap(f'{self.save_path}in-{self.name}', dtype='int', mode='w+',
                                       shape=(sequence.shape[0] * self.num_looking,))
             self.in_file[:sequence.shape[0]] = sequence
@@ -348,35 +348,32 @@ def process_data(max_proteins=1000):
     # Saves processed data into proteins_cleaned under test, train, and valid
     pu = protein_unifier(len(train_codes), name='train')
     for i, code in enumerate(train_codes):
-        try:
-            print(f'Saved one! {code} {round(((i / len(train_codes)) * 100), 2)}')
-            given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
-            target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
+        print(f'Saved one! {code} {round(((i / len(train_codes)) * 100), 2)}')
+        given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
+        target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
 
-            # print(f'given: {given}')
+        # print(f'given: {given}')
 
-            # process data
-            onehot_target = one_hot_encode_column(target, 0, 85)
-            onehot_target = normalize_target(onehot_target)
-            # print(f'target shape: {onehot_target.shape}')
-            # target = format_sample(onehot_target)
-            #
-            #
-            # # save input-output pair
-            # np.save(os.path.join(save_dir, 'train', f'{code}-sample.npy'), given)
-            # np.save(os.path.join(save_dir, 'train', f'{code}-target.npy'), target)
-            # # print(f'given shape: {len(str(given))}')
-            # # print(f'target shape: {onehot_target.shape}')
-            g = format_input(given, pad=True)
-            t = stack_atoms(onehot_target)
-            t = format_sample(t, pad=True)
-            # print(f'given after formatting: {len(g)}')
-            # print(f'target after formatting: {t.shape}')
-            pu.add_protein(g, t)
-            # global num_training
-            # num_training += 1
-        except:
-            logger.exception(f'FATAL ERROR WITH THIS PROTEIN! {code}')
+        # process data
+        onehot_target = one_hot_encode_column(target, 0, 85)
+        onehot_target = normalize_target(onehot_target)
+        # print(f'target shape: {onehot_target.shape}')
+        # target = format_sample(onehot_target)
+        #
+        #
+        # # save input-output pair
+        # np.save(os.path.join(save_dir, 'train', f'{code}-sample.npy'), given)
+        # np.save(os.path.join(save_dir, 'train', f'{code}-target.npy'), target)
+        # # print(f'given shape: {len(str(given))}')
+        # # print(f'target shape: {onehot_target.shape}')
+        g = format_input(given, pad=True)
+        t = stack_atoms(onehot_target)
+        t = format_sample(t, pad=True)
+        # print(f'given after formatting: {len(g)}')
+        # print(f'target after formatting: {t.shape}')
+        pu.add_protein(g, t)
+        # global num_training
+        # num_training += 1
     # print(pu)
     pu.save('train')
 
@@ -1108,7 +1105,7 @@ if __name__ == "__main__":
     else:
         node_name = 'Default'
         reprocess = 't'
-        data_size = 10
+        data_size = 2
         num_heads = 8
         depth = 4
 
@@ -1190,7 +1187,7 @@ if __name__ == "__main__":
     esm_model = esm_model.to(device)
 
     pdb_dir = "path_to_pdbs"
-    dataset = ProteinStructureDataset(pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device, num_training=int(data_size * 0.8))
+    dataset = ProteinStructureDataset(pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device, num_training=data_size)
     model = ProteinStructurePredictor(embed_dim=esm_model.embed_dim, depth=depth, num_heads=num_heads, mlp_ratio=4.0)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
@@ -1237,7 +1234,7 @@ if __name__ == "__main__":
 
 
 
-    train_model(model, dataset, criterion, optimizer, epochs=1000, batch_size=2, shuffle=True, device=device,
+    train_model(model, dataset, criterion, optimizer, epochs=10000, batch_size=100, shuffle=True, device=device,
                 print_interval=50, save_after=100, save_loc=f'models/{node_name}/Save')
 
     # Run a single example to evaluate our predictions!
