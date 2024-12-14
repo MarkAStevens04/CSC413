@@ -1238,7 +1238,7 @@ if __name__ == "__main__":
 
 
 
-    train_model(model, dataset, criterion, optimizer, epochs=10000, batch_size=20, shuffle=True, device=device,
+    train_model(model, dataset, criterion, optimizer, epochs=10, batch_size=2, shuffle=True, device=device,
                 print_interval=50, save_after=100, save_loc=f'models/{node_name}/Save')
 
     # Run a single example to evaluate our predictions!
@@ -1307,6 +1307,50 @@ if __name__ == "__main__":
     logging.info(f'Complete!!! Took {time.time() - start} seconds!!')
     torch.save(model, f'models/model-FINISHED-{node_name}-{attempt_num}')
     logging.info(f'Saved model successfully!')
+
+    print(f'----------------------------------------------------------------------------------------------')
+
+    model_loaded = torch.load(f'models/downloads/Save-1030', weights_only=False)
+    dataloader = DataLoader(dataset, batch_size=20, shuffle=True, collate_fn=custom_collate_fn_two)
+    model_loaded.eval()
+    for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
+        coords_true = coords_true.to(device)
+        seq_emb = seq_emb.to(device)
+        coords_pred = model_loaded(seq_emb)
+        break
+    print(f'seq_emb: {seq_emb.shape}')
+
+    # seq_emb = seq_emb.to(device)  # [B, L, D]
+    #             coords_true = coords_true.to(device)  # [B, L, 3]
+
+    #             # Forward pass
+    #             coords_pred = model(seq_emb)
+
+    # Display the result of our single prediction
+    # print(f'coords true: {coords_true}')
+    print(f'original shape: {coords_true.shape}')
+    print(f'original pred shape: {coords_pred.shape}')
+
+    print(f'selection: {coords_true[0, 50:55, 87]}')
+
+    ct_cpu = coords_true.to('cpu')[0]
+    cp_cpu = coords_pred.to('cpu')[0]
+
+    # ct_cpu = coords_true.cpu()
+    # cp_cpu = coords_pred.cpu()
+
+    unstacked_true = unstack(ct_cpu)
+    unstacked_pred = unstack(cp_cpu)
+    print(f'final shape     : {unstacked_true.shape}')
+    print(f'prediction shape: {unstacked_pred.shape}')
+    for i in range(5):
+        for t, p in zip(unstacked_true[i, :, -5:], unstacked_pred[i, :, -5:]):
+            print(f'true: {t}')
+            print(f'pred: {p}')
+            print()
+        print()
+
+
 
 
     # Example code for if we want to turn off the gradient of our undefined input
