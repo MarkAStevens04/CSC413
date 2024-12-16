@@ -44,14 +44,14 @@ Helpful debugging documentation can be found [here](https://saturncloud.io/blog/
 This code was run with Python 3.11.
 
 # How to use
-### Data Processing
+## Data Processing
 Run `parse_seq.py` to automatically download and parse files. Note that you may need to run `transformer.py` for automatic creation of directories.
 
 Protein IDs can be specified in `PDBs/protein-ids.txt`. Protein ids are 4-letter codes for downloading the protein's structure from the RCSB.
 
 Pre-processed data will automatically be saved to `PDBs/pre_processed_data`. If downloading many proteins (>1,000) it's advisable to run this as soon as possible, as the data pre-processing may take a while.
 
-### Training
+## Training
 To train a model, run `transformer.py`. If running from the terminal, you may optionally add arguments.
 
 `transformer.py <Node name> <reprocess> <data size> <model heads> <model depth>`
