@@ -3,11 +3,11 @@
 A transformer architecture, from start to finish.
 
 # Overview of Files
-- **get_pdbs.py** : Download mmCif files, extract atom positions & protein sequence
-- **amino_expert.py** : Utilize "standard aminos" to assist with amino-atom-index interconversions
-- **parse_seq.py** : Compare full protein sequence to known atom sequence. Data pre-processing.
-- **transformer.py** : Codes our transformer and some final data processing. Code for concurrent trainings.
-- **eval_model.py** : Take save states of models & obtain training & validation accuracies at different time points.
+- **get_pdbs.py** : Download mmCif files, extract atom positions & protein sequence.
+- **amino_expert.py** : Utilize "standard aminos" to assist with amino-atom-index interconversions.
+- **parse_seq.py** : Align full protein sequence with known atom sequence. Data pre-processing.
+- **transformer.py** : Final data processing & Transformer training. Code for concurrent trainings & CUDA acceleration.
+- **eval_model.py** : Take model save-states & obtain training & validation accuracies at different time points.
 
 # Highlights
 - Atom-Level Intrinsically Disordered Region Identification: 
@@ -23,11 +23,17 @@ A transformer architecture, from start to finish.
 - Extensive Logging
   - To enable quick debugging in multi-node environments, we use extensive data logging to track errors as they occur. We 'fail gracefully', allowing for this large project to handle unexpected cases & continue training even if exceptions occur.
 - Model Saves
-  - Save models during training with configurable save frequencies. Allows for model to be recovered in case of a node fails. Also enables retroactive performance analysis by iterating through every saved model & testing performance at that stage of training.
-
-
+  - Save models during training with configurable save frequencies. Allows for model to be recovered in case of node failure. Also enables retroactive performance analysis by iterating through every saved model & testing performance at that stage of training.
+- ESM Embedding Integration
+  - Utilizes existing architecture (ESM Fold) for amino acid embedding. Accelerates training by reducing time of model warm-up.
+- Extensive Model Analysis
+  - Utilizes vast array of established model analysis tools, including RMSD, TM-Score and GDT.
+- Protein Rendering
+  - Framework established for rendering proteins from their predicted positions. Uses existing mmCif file & modifies positions of each atom.
 
 # How to install
+Clone the repository, then downloaded required packages with
 
+'pip install -r requirements.txt'
 
 # How to use
