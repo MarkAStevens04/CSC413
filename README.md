@@ -1,6 +1,7 @@
-# CSC413
+![Alt text](logo.png?raw=true "Sigma Fold with 4 computer programmers")
+
  Final project for CSC413!
-![Alt text](relative%20logo.png?raw=true "Title")
+
 # Project Explanation
 
 
