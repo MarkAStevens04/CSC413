@@ -15,7 +15,8 @@ import logging
 import logging.handlers
 import time
 import sys
-import seaborn
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
 logger = logging.getLogger(__name__)
@@ -620,6 +621,47 @@ def print_prediction(unstacked_true, unstacked_pred):
           print()
 
 
+def plot_acc_loss(node_name):
+    train_acc = np.load(f'PDBs/accuracies/train_acc/{node_name}.npy', mmap_mode='r', allow_pickle=True)
+    valid_acc = np.load(f'PDBs/accuracies/valid_acc/{node_name}.npy', mmap_mode='r', allow_pickle=True)
+
+    train_loss = np.load(f'PDBs/accuracies/train_loss/{node_name}.npy', mmap_mode='r', allow_pickle=True)
+    valid_loss = np.load(f'PDBs/accuracies/valid_loss/{node_name}.npy', mmap_mode='r', allow_pickle=True)
+
+    train_acc = train_acc.squeeze()
+    valid_acc = valid_acc.squeeze()
+
+    train_loss = train_loss.squeeze()
+    valid_loss = valid_loss.squeeze()
+
+    # t = np.arange(0, 2000, 10)
+    # even though step size is 10, we only saved every 100 proteins, so each save represents 100 proteins.
+    # 100 * 10 = 1000
+    t = np.arange(0, 2000 * 100, 10 * 100)
+
+    plt.figure(figsize=(10, 10))
+
+    plt.plot(t, train_acc, label=f'training')
+    plt.plot(t, valid_acc, label=f'validation')
+
+    plt.title(f'Training accuracy of model {node_name[-3:-1]}')
+    plt.xlabel(f'Samples trained on')
+    plt.ylabel(f'TM-score')
+    plt.legend()
+
+    plt.savefig(f'Results/{node_name}-Accuracy.png')
+    plt.figure(figsize=(8, 8))
+
+    plt.plot(t, train_loss, label=f'training')
+    plt.plot(t, valid_loss, label=f'validation')
+
+    plt.title(f'Training Loss of model {node_name[-3:-1]}')
+    plt.xlabel(f'Samples trained on')
+    plt.ylabel(f'RMSD Loss')
+    plt.legend()
+    plt.savefig(f'Results/{node_name}-Loss.png')
+
+
 
 
 if __name__ == '__main__':
@@ -655,84 +697,93 @@ if __name__ == '__main__':
     # ---------------------- End Logging Framework ----------------------
 
 
-    # how large to step for each accuracy
-    step_size = 10
-    max = 2000
-    i = 0
+    # # how large to step for each accuracy
+    # step_size = 10
+    # max = 2000
+    # i = 0
+    #
+    # train_acc = np.memmap(f'PDBs/accuracies/train_acc/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
+    # valid_acc = np.memmap(f'PDBs/accuracies/valid_acc/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
+    #
+    # train_loss = np.memmap(f'PDBs/accuracies/train_loss/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
+    # valid_loss = np.memmap(f'PDBs/accuracies/valid_loss/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
+    # # train_acc = np.zeros((9, max // step_size))
+    # # valid_acc = np.zeros((9, max // step_size))
+    #
+    # seq_train = np.load('PDBs/big_data/tests/in-train.npy', mmap_mode='r', allow_pickle=True)
+    # tar_train = np.load('PDBs/big_data/tests/out-train.npy', mmap_mode='r', allow_pickle=True)
+    # # only want the first 100 samples
+    # # recall samples are stacked on top of one another
+    # seq_train = seq_train[:1000 * 100]
+    # tar_train = tar_train[:1000 * 100, :]
+    #
+    # seq_valid = np.load('PDBs/big_data/tests/in-valid.npy', mmap_mode='r', allow_pickle=True)
+    # tar_valid = np.load('PDBs/big_data/tests/out-valid.npy', mmap_mode='r', allow_pickle=True)
+    #
+    # seq_valid = seq_valid[:1000 * 100]
+    # tar_valid = tar_valid[:1000 * 100, :]
+    #
+    #
+    # r = RMSDLoss()
+    # print(f'train acc: {train_acc.shape}')
+    # for n in range(0, max, step_size):
+    #     print(f'n: {n}')
+    #     logging.info(f'- n {n} -')
+    #     torch.set_grad_enabled(False)
+    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #     model = open_model(f'models/{node_name}/Save-{i}')
+    #
+    #     # calculate accuracy for training and validation
+    #     tm_scores, losses = predict_codes(seq_train, tar_train, model)
+    #     avg_train = np.average(tm_scores)
+    #     avg_tLoss = np.average(losses)
+    #
+    #     tm_scores, losses = predict_codes(seq_valid, tar_valid, model)
+    #     avg_valid = np.average(tm_scores)
+    #     avg_vLoss = np.average(losses)
+    #
+    #     # calculate loss for training and validation
+    #
+    #
+    #     # print(f'avg train score: {avg_train}')
+    #     print(f'avg train score: {avg_train}')
+    #     print(f'avg valid score: {avg_valid}')
+    #
+    #     train_acc[0, i] = avg_train
+    #     valid_acc[0, i] = avg_valid
+    #
+    #     train_loss[0, i] = avg_tLoss
+    #     valid_loss[0, i] = avg_vLoss
+    #     logging.info(f'Added all nodes for iter {n}')
+    #     print()
+    #     i += 1
+    #
+    # # print(f'train accuracies: {train_acc}')
+    # # print(f'valid accuracies: {valid_acc}')
+    # np.save(f'PDBs/accuracies/train_acc/{node_name}', allow_pickle=True, arr=train_acc)
+    # np.save(f'PDBs/accuracies/valid_acc/{node_name}', allow_pickle=True, arr=valid_acc)
+    #
+    # np.save(f'PDBs/accuracies/train_loss/{node_name}', allow_pickle=True, arr=train_loss)
+    # np.save(f'PDBs/accuracies/valid_loss/{node_name}', allow_pickle=True, arr=valid_loss)
 
-    train_acc = np.memmap(f'PDBs/accuracies/train_acc/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
-    valid_acc = np.memmap(f'PDBs/accuracies/valid_acc/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
 
-    train_loss = np.memmap(f'PDBs/accuracies/train_loss/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
-    valid_loss = np.memmap(f'PDBs/accuracies/valid_loss/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
-    # train_acc = np.zeros((9, max // step_size))
-    # valid_acc = np.zeros((9, max // step_size))
-
-    seq_train = np.load('PDBs/big_data/tests/in-train.npy', mmap_mode='r', allow_pickle=True)
-    tar_train = np.load('PDBs/big_data/tests/out-train.npy', mmap_mode='r', allow_pickle=True)
-    # only want the first 100 samples
-    # recall samples are stacked on top of one another
-    seq_train = seq_train[:1000 * 100]
-    tar_train = tar_train[:1000 * 100, :]
-
-    seq_valid = np.load('PDBs/big_data/tests/in-valid.npy', mmap_mode='r', allow_pickle=True)
-    tar_valid = np.load('PDBs/big_data/tests/out-valid.npy', mmap_mode='r', allow_pickle=True)
-
-    seq_valid = seq_valid[:1000 * 100]
-    tar_valid = tar_valid[:1000 * 100, :]
-
-
-    r = RMSDLoss()
-    print(f'train acc: {train_acc.shape}')
-    for n in range(0, max, step_size):
-        print(f'n: {n}')
-        logging.info(f'- n {n} -')
-        torch.set_grad_enabled(False)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = open_model(f'models/{node_name}/Save-{i}')
-
-        # calculate accuracy for training and validation
-        tm_scores, losses = predict_codes(seq_train, tar_train, model)
-        avg_train = np.average(tm_scores)
-        avg_tLoss = np.average(losses)
-
-        tm_scores, losses = predict_codes(seq_valid, tar_valid, model)
-        avg_valid = np.average(tm_scores)
-        avg_vLoss = np.average(losses)
-
-        # calculate loss for training and validation
-
-
-        # print(f'avg train score: {avg_train}')
-        print(f'avg train score: {avg_train}')
-        print(f'avg valid score: {avg_valid}')
-
-        train_acc[0, i] = avg_train
-        valid_acc[0, i] = avg_valid
-
-        train_loss[0, i] = avg_tLoss
-        valid_loss[0, i] = avg_vLoss
-        logging.info(f'Added all nodes for iter {n}')
-        print()
-        i += 1
-
-    # print(f'train accuracies: {train_acc}')
-    # print(f'valid accuracies: {valid_acc}')
-    np.save(f'PDBs/accuracies/train_acc/{node_name}', allow_pickle=True, arr=train_acc)
-    np.save(f'PDBs/accuracies/valid_acc/{node_name}', allow_pickle=True, arr=valid_acc)
-
-    np.save(f'PDBs/accuracies/train_loss/{node_name}', allow_pickle=True, arr=train_loss)
-    np.save(f'PDBs/accuracies/valid_loss/{node_name}', allow_pickle=True, arr=valid_loss)
-
+    # ----------------------------- Plot accuracies and losses
     # train_acc = np.load('PDBs/accuracies/train_acc/DH01A.npy', mmap_mode='r', allow_pickle=True)
     # valid_acc = np.load('PDBs/accuracies/valid_acc/DH01A.npy', mmap_mode='r', allow_pickle=True)
     #
     # train_loss = np.load('PDBs/accuracies/train_loss/DH01A.npy', mmap_mode='r', allow_pickle=True)
     # valid_loss = np.load('PDBs/accuracies/valid_loss/DH01A.npy', mmap_mode='r', allow_pickle=True)
     #
+    #
     # print(f'train acc: {train_acc}')
     # print(f'valid acc: {valid_acc}')
     #
     # print(f'train loss: {train_loss}')
     # print(f'valid loss: {valid_loss}')
+    for i in range(9):
+        i += 1
+        name = f'DH0' + str(i) + 'A'
+        plot_acc_loss(name)
+    # plot_acc_loss('DH01A')
+    # plt.show()
 
