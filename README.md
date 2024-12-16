@@ -33,15 +33,14 @@ A transformer architecture, from start to finish.
 
 
 # How to install
-Clone the repository, then downloaded required packages with
+1. Clone the repository onto your device
+2. Downloaded required packages with `pip install -r requirements.txt`
 
-`pip install -r requirements.txt`
 
-Then install pytorch with cuda. Documentation for this installation can be found [here](https://pytorch.org/get-started/locally/). 
+3. Install pytorch with cuda. Documentation for this installation can be found [here](https://pytorch.org/get-started/locally/). 
 Helpful debugging documentation can be found [here](https://saturncloud.io/blog/pytorch-says-that-cuda-is-not-available-troubleshooting-guide-for-data-scientists/#:~:text=Check%20your%20PyTorch%20installation%3A%20If,ensure%20that%20it's%20installed%20correctly.&text=This%20will%20list%20any%20CUDA%2Drelated%20errors%20in%20your%20system%20logs).
-
-Please Note: Some packages may not be listed in requirements.txt and will require manual download.
-
+ 
+   Please Note: Some packages may not be listed in requirements.txt and will require manual download.
 This code was run with Python 3.11.
 
 # How to use
