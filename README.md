@@ -63,3 +63,9 @@ To train a model, run `transformer.py`. If running from the terminal, you may op
 - **Data size**: Number of proteins from your pre-processed data you would like to include. Allows for debugging with small sample size without augmenting previously performed data pre-processing.
 - **Model heads**: Number of heads in our multi-head transformer architecture.
 - **Model depth**: Number of attention heads we run successively.
+
+# Contributors
+- Mark Stevens @MarkAStevens04
+- Adelina Patlatii @AdelinaPatlatii
+- Eilia Zomorrodian @E-zomorod
+- Shabnam Tajik @ShbnmTjk
