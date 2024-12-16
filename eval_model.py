@@ -427,17 +427,27 @@ def calculate_tm_score(true_coords, pred_coords, d0=None):
     - TM-score (float between 0 and 1)
     """
     # Ensure inputs are numpy arrays
-    true_coords = np.array(true_coords)
-    pred_coords = np.array(pred_coords)
+    true_coords = np.array(true_coords)[:, 1:2, :]
+    pred_coords = np.array(pred_coords)[:, 1:2, :]
+    # print(f'true coords shape: {true_coords.shape}')
+    # print(f'first 3: {true_coords[0, 1, -5:]} {true_coords[0, 1, 1]}')
 
     # get the lists of coordinates only for atoms that have a defined position
     known_aminos = np.argwhere(true_coords[:, :, -2] == 1)
-    # print(f'known aminos: {known_aminos.shape}')
+
     # known_true = true_coords[known_aminos]
     # known_pred = pred_coords[known_aminos]
     known_true = true_coords[known_aminos[:, 0], known_aminos[:, 1], -5:-2]
     known_pred = pred_coords[known_aminos[:, 0], known_aminos[:, 1], -5:-2]
     # print(f'true coords: {true_coords.shape}')
+    # for i in known_true:
+    #     print(f'true: {i}')
+    #     print(f'pred: {i}')
+    # print(f'known aminos: {known_aminos.shape}')
+    # print(f'some known aminos: {known_aminos}')
+    # for i in known_aminos:
+    #     print(f'known: {true_coords[i[0], i[1], -5:-2]} {true_coords[i[0], i[1], 1]}')
+    #     print(f'pred : {pred_coords[i[0], i[1], -5:-2]} {pred_coords[i[0], i[1], 1]}')
 
     # print(f'known true: {known_true.shape}')
     # print(f'known pred: {known_pred.shape}')
@@ -489,6 +499,7 @@ def calculate_gdt_ts(true_coords, pred_coords, distance_thresholds=[1, 2, 4, 8])
     # Ensure inputs are numpy arrays
     true_coords = np.array(true_coords)
     pred_coords = np.array(pred_coords)
+
 
     # get the lists of coordinates only for atoms that have a defined position
     known_aminos = np.argwhere(true_coords[:, :, -2] == 1)
@@ -557,11 +568,11 @@ def predict_codes(seq, tar, model):
     data_size = seq.shape[0]
     dataset = ProteinStructureDataset(pdb_dir, esm_model, esm_batch_converter, seq, tar, device,
                                       num_training=data_size)
-    batch_size = 10
+    batch_size = 4
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=custom_collate_fn_two)
 
 
-    num_batches = 10
+    num_batches = 1
     tm_scores = np.zeros((batch_size * num_batches))
     losses = np.zeros((batch_size * num_batches))
     i = 0
@@ -733,6 +744,32 @@ if __name__ == '__main__':
     seq_valid = seq_valid[:1000 * 100]
     tar_valid = tar_valid[:1000 * 100, :]
 
+    # -------------------- Single prediction ----------------
+    torch.set_grad_enabled(False)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = open_model(f'models/{node_name}/Save-500')
+
+    # calculate accuracy for training and validation
+    tm_scores, losses = predict_codes(seq_train, tar_train, model)
+    avg_train = np.average(tm_scores)
+    avg_tLoss = np.average(losses)
+
+    # calculate loss for training and validation
+
+    print(f'all train score: {tm_scores}')
+    print(f'avg train score: {avg_train}')
+
+
+
+
+
+    pause
+
+
+
+
+
+
 
     r = RMSDLoss()
     print(f'train acc: {train_acc.shape}')
@@ -742,6 +779,7 @@ if __name__ == '__main__':
         torch.set_grad_enabled(False)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = open_model(f'models/{node_name}/Save-{i}')
+        # model = open_model(f'models/{node_name}/Save-500')
 
         # calculate accuracy for training and validation
         tm_scores, losses = predict_codes(seq_train, tar_train, model)
