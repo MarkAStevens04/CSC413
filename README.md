@@ -65,7 +65,7 @@ To train a model, run `transformer.py`. If running from the terminal, you may op
 - **Model depth**: Number of attention heads we run successively.
 
 # Contributors
-- Mark Stevens @MarkAStevens04
-- Adelina Patlatii @AdelinaPatlatii
-- Eilia Zomorrodian @E-zomorod
-- Shabnam Tajik @ShbnmTjk
+- Mark Stevens [@MarkAStevens04](https://github.com/MarkAStevens04)
+- Adelina Patlatii [@AdelinaPatlatii](https://github.com/AdelinaPatlatii)
+- Eilia Zomorrodian [@E-zomorod](https://github.com/E-zomorod)
+- Shabnam Tajik [@ShbnmTjk](https://github.com/ShbnmTjk)
