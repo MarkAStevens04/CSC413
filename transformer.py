@@ -1,4 +1,3 @@
-
 import os
 import torch
 import torch.nn as nn
@@ -338,13 +337,13 @@ def process_data(max_proteins=1000):
     code_set = code_set[:max_proteins]
     print(f'all names: {code_set}')
     # make our train-test split
-    # train_codes = code_set[:int(len(code_set) * 0.8)]
-    # valid_codes = code_set[int(len(code_set) * 0.8):int(len(code_set) * 0.9)]
-    # test_codes = code_set[int(len(code_set) * 0.9):]
+    train_codes = code_set[:int(len(code_set) * 0.8)]
+    valid_codes = code_set[int(len(code_set) * 0.8):int(len(code_set) * 0.9)]
+    test_codes = code_set[int(len(code_set) * 0.9):]
 
-    train_codes = code_set[:]
-    valid_codes = []
-    test_codes = []
+    # train_codes = code_set[:]
+    # valid_codes = []
+    # test_codes = []
 
     # Saves processed data into proteins_cleaned under test, train, and valid
     pu = protein_unifier(len(train_codes), name='train')
@@ -1089,6 +1088,82 @@ def unstack(coords):
 
 
 
+def open_model(model_dir):
+    model = torch.load(model_dir, weights_only=False)
+    return model
+
+
+def predict_codes(in_dir, out_dir, model):
+    """
+    Manually return prediction from directories of processed protein files
+
+    Takes a directory of in and out files, returns predictions of those files
+    :param in_dir:
+    :param out_dir:
+    :return:
+    """
+    model.eval()
+    seq = np.load(in_dir, mmap_mode='r', allow_pickle=True)
+    tar = np.load(out_dir, mmap_mode='r', allow_pickle=True)
+    # 'PDBs/big_data/tests/in-train.npy'
+    # 'PDBs/big_data/tests/out-train.npy'
+
+
+    esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
+    esm_batch_converter = esm_alphabet.get_batch_converter()
+    esm_model.eval()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    esm_model = esm_model.to(device)
+
+    pdb_dir = "UNUSED_WILL_REMOVE"
+    dataset = ProteinStructureDataset(pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device,
+                                      num_training=int(data_size * 0.8))
+    DataLoader(dataset, batch_size=10, shuffle=True, collate_fn=custom_collate_fn_two)
+
+    coords_pred = torch.zeros((tar.shape))
+
+    for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
+        coords_true = coords_true.to(device)
+        seq_emb = seq_emb.to(device)
+        print(f'coords pred shape: {coords_pred.shape}')
+        coords_pred[batch_idx] = model(seq_emb)
+        # break
+    print(f'seq_emb: {seq_emb.shape}')
+    # Display the result of our single prediction
+    # print(f'coords true: {coords_true}')
+    print(f'original shape: {coords_true.shape}')
+    print(f'original pred shape: {coords_pred.shape}')
+
+    print(f'selection: {coords_true[0, 50:55, 87]}')
+
+    ct_cpu = coords_true.to('cpu')[0]
+    cp_cpu = coords_pred.to('cpu')[0]
+
+    # ct_cpu = coords_true.cpu()
+    # cp_cpu = coords_pred.cpu()
+
+    unstacked_true = unstack(ct_cpu)
+    unstacked_pred = unstack(cp_cpu)
+    print(f'final shape     : {unstacked_true.shape}')
+    print(f'prediction shape: {unstacked_pred.shape}')
+    for i in range(5):
+        for t, p in zip(unstacked_true[i, :, -5:], unstacked_pred[i, :, -5:]):
+            print(f'true: {t}')
+            print(f'pred: {p}')
+            print()
+        print()
+
+
+
+
+
+
+
+
+
+
+
 if __name__ == "__main__":
     # System arguments: Node name, reprocess, data size, num_heads, depth!
     print(f'sys argv: {sys.argv}')
@@ -1109,7 +1184,7 @@ if __name__ == "__main__":
     else:
         node_name = 'Default'
         reprocess = 't'
-        data_size = 2
+        data_size = 10
         num_heads = 8
         depth = 4
 
@@ -1309,46 +1384,46 @@ if __name__ == "__main__":
     logging.info(f'Saved model successfully!')
 
     print(f'----------------------------------------------------------------------------------------------')
+    # # Protein codes that work well: ['6jux', '6zgc']
+    # model_loaded = torch.load(f'models/downloads/Save-1030', weights_only=False)
+    # dataloader = DataLoader(dataset, batch_size=20, shuffle=True, collate_fn=custom_collate_fn_two)
+    # seq_emb = dataset[2]
+    # print(f'seq emb: {seq_emb[0].shape}, {seq_emb[1].shape}')
+    # model_loaded.eval()
+    # for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
+    #     coords_true = coords_true.to(device)
+    #     seq_emb = seq_emb.to(device)
+    #     coords_pred = model_loaded(seq_emb)
+    #     break
+    # print(f'seq_emb: {seq_emb.shape}')
+    # # Display the result of our single prediction
+    # # print(f'coords true: {coords_true}')
+    # print(f'original shape: {coords_true.shape}')
+    # print(f'original pred shape: {coords_pred.shape}')
+    #
+    # print(f'selection: {coords_true[0, 50:55, 87]}')
+    #
+    # ct_cpu = coords_true.to('cpu')[0]
+    # cp_cpu = coords_pred.to('cpu')[0]
+    #
+    # # ct_cpu = coords_true.cpu()
+    # # cp_cpu = coords_pred.cpu()
+    #
+    # unstacked_true = unstack(ct_cpu)
+    # unstacked_pred = unstack(cp_cpu)
+    # print(f'final shape     : {unstacked_true.shape}')
+    # print(f'prediction shape: {unstacked_pred.shape}')
+    # for i in range(5):
+    #     for t, p in zip(unstacked_true[i, :, -5:], unstacked_pred[i, :, -5:]):
+    #         print(f'true: {t}')
+    #         print(f'pred: {p}')
+    #         print()
+    #     print()
 
-    model_loaded = torch.load(f'models/downloads/Save-1030', weights_only=False)
-    dataloader = DataLoader(dataset, batch_size=20, shuffle=True, collate_fn=custom_collate_fn_two)
-    model_loaded.eval()
-    for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
-        coords_true = coords_true.to(device)
-        seq_emb = seq_emb.to(device)
-        coords_pred = model_loaded(seq_emb)
-        break
-    print(f'seq_emb: {seq_emb.shape}')
-
-    # seq_emb = seq_emb.to(device)  # [B, L, D]
-    #             coords_true = coords_true.to(device)  # [B, L, 3]
-
-    #             # Forward pass
-    #             coords_pred = model(seq_emb)
-
-    # Display the result of our single prediction
-    # print(f'coords true: {coords_true}')
-    print(f'original shape: {coords_true.shape}')
-    print(f'original pred shape: {coords_pred.shape}')
-
-    print(f'selection: {coords_true[0, 50:55, 87]}')
-
-    ct_cpu = coords_true.to('cpu')[0]
-    cp_cpu = coords_pred.to('cpu')[0]
-
-    # ct_cpu = coords_true.cpu()
-    # cp_cpu = coords_pred.cpu()
-
-    unstacked_true = unstack(ct_cpu)
-    unstacked_pred = unstack(cp_cpu)
-    print(f'final shape     : {unstacked_true.shape}')
-    print(f'prediction shape: {unstacked_pred.shape}')
-    for i in range(5):
-        for t, p in zip(unstacked_true[i, :, -5:], unstacked_pred[i, :, -5:]):
-            print(f'true: {t}')
-            print(f'pred: {p}')
-            print()
-        print()
+    model = open_model(f'models/downloads/Save-1030')
+    predict_codes('PDBs/big_data/tests/in-train.npy', 'PDBs/big_data/tests/out-train.npy', model)
+    # 'PDBs/big_data/tests/in-train.npy'
+    #  'PDBs/big_data/tests/out-train.npy'
 
 
 

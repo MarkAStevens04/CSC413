@@ -1,0 +1,666 @@
+import torch
+import os
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import Dataset, DataLoader
+from Bio.PDB import PDBList, PDBParser
+import math
+import copy
+import esm
+import numpy as np
+import random
+from torch.utils.data import DataLoader
+import torch
+import logging
+import logging.handlers
+import time
+import sys
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+block_size = 1000
+os.makedirs(f'PDBs/accuracies', exist_ok=True)
+
+def open_model(model_dir):
+    with torch.no_grad():
+      model = torch.load(model_dir, weights_only=False)
+      return model
+
+
+
+def positional_encoding(length, dim, device):
+    """
+    Encodes information about position of atom.
+
+    Uses sin, cos to create unique combination for each position.
+    """
+    position = torch.arange(length, dtype=torch.float, device=device).unsqueeze(1)
+    div_term = torch.exp(torch.arange(0, dim, 2, dtype=torch.float, device=device) *
+                         (-math.log(10000.0) / dim))
+    pe = torch.zeros(length, dim, device=device)
+    pe[:, 0::2] = torch.sin(position * div_term)
+    pe[:, 1::2] = torch.cos(position * div_term)
+    return pe
+
+
+def custom_collate_fn_two(batch):
+    """
+    Collate function to handle variable-length (esm_emb, coords) pairs.
+    Each item in batch is (esm_emb, coords) with shape [L, D] and [L, 3], respectively.
+
+    Steps:
+    1. Find max_length across all samples in the batch.
+    2. Pad all embeddings and coords to this max_length.
+    3. Stack them along the batch dimension.
+    """
+    # ******************* Extend this by adding your own stacking function!!! *******************
+    # So first stack all atoms from all amino acids for all proteins.
+    # Then, add BOS & EOS identifiers.
+    # Then stack all proteins on each other.
+    # Then, save this super stack as a single file.
+    # Finally, load memory maps from this super stack.
+
+
+    # print(f'batch[0]: {batch[0]}')
+    # print(f'len batch: {len(batch)}')
+    x = torch.zeros(len(batch), batch[0][0].shape[1], batch[0][0].shape[2])
+    t = torch.zeros(len(batch), batch[0][1].shape[0], batch[0][1].shape[1])
+    # print(f'x shape: {x.shape}')
+    # print(f't shape: {t.shape}')
+
+    for i, (esm_emb, coords) in enumerate(batch):
+        x[i, :, :] = esm_emb
+        t[i, :, :] = coords
+
+    if device == 'cuda':
+        # pin arrays x,t, which allows us to move them to GPU asynchronously
+        #  (non_blocking=True)
+        x, t = x.pin_memory().to(device, non_blocking=True), t.pin_memory().to(device, non_blocking=True)
+    else:
+        x, t = x.to(device), t.to(device)
+    return x, t
+
+
+
+class ProteinStructureDataset(Dataset):
+  def __init__(self, pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device, num_training):
+      self.pdb_dir = pdb_dir
+      self.esm_model = esm_model
+      self.esm_batch_converter = esm_batch_converter
+      self.train_seq = train_seq
+      self.train_tar = train_tar
+      self.block_size = block_size
+
+      self.device = device
+      self.traversed = 0
+
+      self.starts = np.where(self.train_seq == 0)[0]
+      self.num_training = num_training
+
+
+  def set_batch_size(self, batch_size):
+      self.batch_size = batch_size
+      self.num_batches = self.num_training // self.batch_size
+      # print(f'self starts: {self.starts}')
+      self.update_batches()
+
+  def update_batches(self):
+      self.random_seq = torch.randint(self.starts.shape[0], (self.starts.shape[0],))
+      # indices = np.linspace(0, self.starts.shape[0])
+      indices = np.arange(0, self.starts.shape[0], step=1)
+      np.random.shuffle(indices)
+      # print(f'indices: {indices}')
+      # print(f'batch size: {self.batch_size}')
+      self.batches = torch.split(torch.from_numpy(indices), self.batch_size)
+      # print(f'self.batches: {self.batches}')
+
+  def __len__(self):
+      return self.num_training
+
+  def __iter__(self):
+      return self
+
+
+  def __getitem__(self, idx):
+
+      coords = torch.from_numpy((self.train_tar[idx:idx + block_size]))
+      seq = torch.from_numpy((self.train_seq[idx:idx + block_size]))
+      seq = seq[None, :]
+      esm_emb = self.to_embedding(seq)
+
+
+      return esm_emb, coords
+
+  def get_batch(self, seq, tar, block_size, batch_size, device, traversed):
+      """
+          Return a minibatch of data. This function is not deterministic.
+          Calling this function multiple times will result in multiple different
+          return values.
+
+          Parameters:
+              `data` - a numpy array (e.g., created via a call to np.memmap)
+              `block_size` - the length of each sequence
+              `batch_size` - the number of sequences in the batch
+              `device` - the device to place the returned PyTorch tensor
+
+          Returns: A tuple of PyTorch tensors (x, t), where
+              `x` - represents the input tokens, with shape (batch_size, block_size)
+              `y` - represents the target output tokens, with shape (batch_size, block_size)
+          """
+      starts = self.batches[traversed]
+      ix = self.starts[starts]
+
+      x = torch.stack([torch.from_numpy((seq[i:i + block_size])) for i in ix])
+      t = torch.stack([torch.from_numpy((tar[i:i + block_size, :])) for i in ix])
+      if device == 'cuda':
+          # pin arrays x,t, which allows us to move them to GPU asynchronously
+          x, t = x.pin_memory().to(device, non_blocking=True), t.pin_memory().to(device, non_blocking=True)
+      else:
+          x, t = x.to(device), t.to(device)
+      return x, t
+
+
+
+
+  def to_embedding(self, tokens):
+      """
+      Converts a batch of tokens to a proper embedding!
+      # Input: (B, L, 1)
+      # Output: (B, L, Embedding_size)
+
+      :param indices:
+      :return:
+      """
+      # print(f'tokens: {tokens[0].shape}')
+      tokens = tokens.to(next(self.esm_model.parameters()).device)
+      with torch.no_grad():
+          results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
+      esm_emb = results["representations"][self.esm_model.num_layers]
+      # print(f'embedded! {esm_emb.shape}')
+      # print(f'embedding shape: {esm_emb.shape}')
+      return esm_emb
+
+
+
+  def get_sequence_and_coords(self, pdb_path):
+      # Extract raw sequence and coords
+      given = np.load(f'{pdb_path}-sample.npy', mmap_mode='r', allow_pickle=True)
+      target= np.load(f'{pdb_path}-target.npy', mmap_mode='r', allow_pickle=True)
+      # stack groups of 27 atoms into a single row!
+      N, M = target.shape
+      # print(f'target shape: {target.shape}')
+      # print(target)
+      reshaped_target = target.reshape(N // 27, 27, M)  # Split into groups of 27 rows
+      stacked_target = reshaped_target.transpose(0, 2, 1).reshape(N // 27, M * 27)
+      return given, stacked_target
+
+  def three_letter_to_one(self, res_name):
+      mapping = {
+          'ALA':'A','CYS':'C','ASP':'D','GLU':'E','PHE':'F','GLY':'G','HIS':'H',
+          'ILE':'I','LYS':'K','LEU':'L','MET':'M','ASN':'N','PRO':'P','GLN':'Q',
+          'ARG':'R','SER':'S','THR':'T','VAL':'V','TRP':'W','TYR':'Y'
+      }
+      return mapping.get(res_name, None)
+
+
+
+class MultiHeadAttention(nn.Module):
+  def __init__(self, embed_dim, num_heads, dropout=0.1):
+      super(MultiHeadAttention, self).__init__()
+      self.embed_dim = embed_dim
+      self.num_heads = num_heads
+      self.head_dim = embed_dim // num_heads
+      assert self.head_dim * num_heads == embed_dim
+
+      self.query_proj = nn.Linear(embed_dim, embed_dim)
+      self.key_proj = nn.Linear(embed_dim, embed_dim)
+      self.value_proj = nn.Linear(embed_dim, embed_dim)
+      self.out_proj = nn.Linear(embed_dim, embed_dim)
+      self.dropout = nn.Dropout(dropout)
+
+  def forward(self, query, key, value, mask=None):
+      B, L_q, D = query.size()
+      B, L_k, D = key.size()
+      B, L_v, D = value.size()
+
+      q = self.query_proj(query).view(B, L_q, self.num_heads, self.head_dim).transpose(1,2)
+      k = self.key_proj(key).view(B, L_k, self.num_heads, self.head_dim).transpose(1,2)
+      v = self.value_proj(value).view(B, L_v, self.num_heads, self.head_dim).transpose(1,2)
+
+      scores = torch.matmul(q, k.transpose(-2,-1)) / math.sqrt(self.head_dim)
+
+      if mask is not None:
+          scores = scores.masked_fill(mask, float('-inf'))
+
+      attn = F.softmax(scores, dim=-1)
+      attn = self.dropout(attn)
+
+      context = torch.matmul(attn, v)
+      context = context.transpose(1,2).contiguous().view(B, L_q, D)
+      out = self.out_proj(context)
+      return out, attn
+
+
+
+
+
+
+
+
+
+
+
+class TransformerBlock(nn.Module):
+  def __init__(self, embed_dim, num_heads, mlp_ratio=4.0, dropout=0.1):
+      super(TransformerBlock, self).__init__()
+      self.attn = MultiHeadAttention(embed_dim, num_heads, dropout)
+      self.ln1 = nn.LayerNorm(embed_dim)
+      self.mlp = nn.Sequential(
+          nn.Linear(embed_dim, int(mlp_ratio*embed_dim)),
+          nn.ReLU(),
+          nn.Dropout(dropout),
+          nn.Linear(int(mlp_ratio*embed_dim), embed_dim),
+          nn.Dropout(dropout)
+      )
+      self.ln2 = nn.LayerNorm(embed_dim)
+
+  def forward(self, x):
+      attn_out, _ = self.attn(x, x, x)
+      x = x + attn_out
+      x = self.ln1(x)
+      mlp_out = self.mlp(x)
+      x = x + mlp_out
+      x = self.ln2(x)
+      return x
+
+
+
+
+class CrossAttentionBlock(nn.Module):
+  def __init__(self, embed_dim, num_heads, mlp_ratio=4.0, dropout=0.1):
+      super(CrossAttentionBlock, self).__init__()
+      self.cross_attn = MultiHeadAttention(embed_dim, num_heads, dropout)
+      self.ln1 = nn.LayerNorm(embed_dim)
+      self.mlp = nn.Sequential(
+          nn.Linear(embed_dim, int(mlp_ratio*embed_dim)),
+          nn.ReLU(),
+          nn.Dropout(dropout),
+          nn.Linear(int(mlp_ratio*embed_dim), embed_dim),
+          nn.Dropout(dropout)
+      )
+      self.ln2 = nn.LayerNorm(embed_dim)
+
+  def forward(self, query, context):
+      cross_out, _ = self.cross_attn(query, context, context)
+      query = query + cross_out
+      query = self.ln1(query)
+      mlp_out = self.mlp(query)
+      query = query + mlp_out
+      query = self.ln2(query)
+      return query
+
+
+
+
+
+
+
+class ProteinStructurePredictor(nn.Module):
+  def __init__(self, embed_dim=768, depth=6, num_heads=8, mlp_ratio=4.0, dropout=0.1, num_structure_tokens=128):
+      super(ProteinStructurePredictor, self).__init__()
+      self.embed_dim = embed_dim
+      self.num_structure_tokens = num_structure_tokens
+
+      self.structure_tokens = nn.Parameter(torch.randn(1, num_structure_tokens, embed_dim))
+
+      self.encoder_blocks = nn.ModuleList([
+          TransformerBlock(embed_dim, num_heads, mlp_ratio, dropout) for _ in range(depth)
+      ])
+
+      self.cross_blocks = nn.ModuleList([
+          CrossAttentionBlock(embed_dim, num_heads, mlp_ratio, dropout) for _ in range(depth)
+      ])
+
+      self.residue_decoder = nn.Linear(embed_dim, embed_dim)
+      self.coord_predictor = nn.Linear(embed_dim, output_len)
+
+  def forward(self, seq_emb):
+      B, L, D = seq_emb.size()
+      device = seq_emb.device
+      seq_emb = seq_emb + positional_encoding(L, D, device).unsqueeze(0)
+
+      x = seq_emb
+      for block in self.encoder_blocks:
+          x = block(x)
+
+      structure_tokens = self.structure_tokens.repeat(B, 1, 1)
+      structure_tokens = structure_tokens + positional_encoding(self.num_structure_tokens, D, device).unsqueeze(0)
+
+      s = structure_tokens
+      for cross_block in self.cross_blocks:
+          s = cross_block(s, x)
+
+      s_pooled = s.mean(dim=1, keepdim=True)
+      decoded = self.residue_decoder(x + s_pooled)
+      coords_pred = self.coord_predictor(decoded)
+      return coords_pred
+
+
+
+
+
+
+def unstack(coords):
+    """
+    Unstacks the coordinates
+    """
+    B, N, M = coords.shape
+    N = N * 27
+    M = M // 27
+    coords = coords.detach().numpy()
+    # reshaped_parts = coords.reshape(N // 27, 27, M)
+    # original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
+
+    reshaped_parts = coords.reshape((N // 27) * B, 27, M)
+    # original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
+
+    # How we stack:
+    # reshaped_target = target.reshape(N // 27, 27, M)  # Split into groups of 27 rows
+    # stacked_target = reshaped_target.reshape(N // 27, M * 27)
+    # original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
+    # return original_array
+    return reshaped_parts
+
+
+
+def calculate_tm_score(true_coords, pred_coords, d0=None):
+    """
+    Calculate TM-score for structural alignment of unstacked coordinates
+
+    Parameters:
+    - true_coords: numpy array of true coordinates
+    - pred_coords: numpy array of predicted coordinates
+    - d0: distance cutoff (if None, calculated automatically)
+
+    Returns:
+    - TM-score (float between 0 and 1)
+    """
+    # Ensure inputs are numpy arrays
+    true_coords = np.array(true_coords)
+    pred_coords = np.array(pred_coords)
+
+    # get the lists of coordinates only for atoms that have a defined position
+    known_aminos = np.argwhere(true_coords[:, :, -2] == 1)
+    # print(f'known aminos: {known_aminos.shape}')
+    # known_true = true_coords[known_aminos]
+    # known_pred = pred_coords[known_aminos]
+    known_true = true_coords[known_aminos[:, 0], known_aminos[:, 1], -5:-2]
+    known_pred = pred_coords[known_aminos[:, 0], known_aminos[:, 1], -5:-2]
+    # print(f'true coords: {true_coords.shape}')
+
+    # print(f'known true: {known_true.shape}')
+    # print(f'known pred: {known_pred.shape}')
+
+    # for i, true, pred in zip(known_aminos, known_true, known_pred):
+    #   print(f'i: {i}')
+    #   print(f'true: {true_coords[i[0], i[1], -5:]}')
+    #   print(f't   : {true}')
+    #   print(f'pred: {pred_coords[i[0], i[1], -5:]}')
+    #   print(f'p   : {pred}')
+
+
+    # Check input shapes
+    if known_true.shape != known_pred.shape:
+        raise ValueError("True and predicted coordinates must have the same shape")
+
+    # Calculate number of points
+    L = known_true.shape[0]
+
+    # Calculate pairwise distances
+    distances = np.sqrt(np.sum((known_true - known_pred)**2, axis=1))
+
+    # Calculate d0 if not provided
+    if d0 is None:
+        # Standard TM-score d0 calculation
+        d0 = 1.24 * np.power(L - 15, 1/3) - 1.8
+
+    # Calculate TM-score
+    tm_scores = 1 / (1 + (distances / d0)**2)
+
+    # Average TM-score
+    tm_score = np.mean(tm_scores)
+
+    return tm_score
+
+def calculate_gdt_ts(true_coords, pred_coords, distance_thresholds=[1, 2, 4, 8]):
+    """
+    Calculate GDT_TS (Global Distance Test Total Score)
+
+    Parameters:
+    - true_coords: numpy array of true coordinate points
+    - pred_coords: numpy array of predicted coordinate points
+    - distance_thresholds: list of distance thresholds to evaluate (default: [1, 2, 4, 8])
+
+    Returns:
+    - GDT_TS score (float between 0 and 100)
+    - Detailed breakdown of points within each threshold
+    """
+    # Ensure inputs are numpy arrays
+    true_coords = np.array(true_coords)
+    pred_coords = np.array(pred_coords)
+
+    # get the lists of coordinates only for atoms that have a defined position
+    known_aminos = np.argwhere(true_coords[:, :, -2] == 1)
+
+    known_true = true_coords[known_aminos[:, 0], known_aminos[:, 1], -5:-2]
+    known_pred = pred_coords[known_aminos[:, 0], known_aminos[:, 1], -5:-2]
+
+    # Check input shapes
+    if known_true.shape != known_pred.shape:
+        raise ValueError("True and predicted coordinates must have the same shape")
+
+    # Calculate pairwise distances
+    distances = np.sqrt(np.sum((known_true - known_pred)**2, axis=1))
+
+    # Calculate points within each threshold
+    threshold_counts = []
+    for threshold in distance_thresholds:
+        # Count points within the current threshold
+        points_within_threshold = np.sum(distances <= threshold)
+        threshold_counts.append(points_within_threshold)
+
+    # Calculate GDT_TS score (average percentage of points within thresholds)
+    total_points = known_true.shape[0]
+    gdt_ts_percentages = [count / total_points * 100 for count in threshold_counts]
+    gdt_ts_score = np.mean(gdt_ts_percentages)
+
+    return gdt_ts_score, dict(zip(distance_thresholds, threshold_counts))
+
+
+
+
+
+
+
+def predict_codes(seq, tar, model):
+    """
+    Manually return prediction from directories of processed protein files
+
+    Takes a directory of in and out files, returns predictions of those files
+
+    :param in_dir:
+    :param out_dir:
+    :return: true values, predictions
+    """
+    model.eval()
+
+    print(f'num proteins in sample: {seq.shape[0] // 1000}')
+
+
+    esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
+    esm_batch_converter = esm_alphabet.get_batch_converter()
+    esm_model.eval()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    esm_model = esm_model.to(device)
+
+    pdb_dir = "UNUSED_WILL_REMOVE"
+    data_size = seq.shape[0]
+    dataset = ProteinStructureDataset(pdb_dir, esm_model, esm_batch_converter, seq, tar, device,
+                                      num_training=data_size)
+    batch_size = 10
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=custom_collate_fn_two)
+
+
+    num_batches = 10
+    tm_scores = np.zeros((batch_size * num_batches))
+    i = 0
+    # for each batch...
+    for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
+        coords_true = coords_true.to(device)
+        seq_emb = seq_emb.to(device)
+        # predict the coordinates from the sequence embedding
+        coords_pred = model(seq_emb)
+
+        # bring true and predicted coordinates to cpu
+        ct_cpu = coords_true.to('cpu')
+        cp_cpu = coords_pred.to('cpu')
+
+        # Get the size of the batch
+        B = ct_cpu.shape[0]
+
+        # Take coordinates from (B,N,2430) into (N*B,27,90)
+        unstacked_true = unstack(ct_cpu)
+        unstacked_pred = unstack(cp_cpu)
+
+        # Take coordinates from (N*B,27,90) into (B,N,27,90)
+        unstacked_true = unstacked_true.reshape(B, -1, 27, 90)
+        unstacked_pred = unstacked_pred.reshape(B, -1, 27, 90)
+
+        # (5, 1000, 27, 90)
+        # Batch size, sequence length, number of atoms, number of dimensions in each atom (only need last 3)
+
+        # Calculate tm score for each protein in batch
+        for j in range(B):
+          tm_scores[i * batch_size + j] = calculate_tm_score(unstacked_true[j], unstacked_pred[j])
+
+        # increase our batch number, break if we've searched all batches!
+        i += 1
+        print(f'computed batch {i}')
+        if i >= num_batches:
+          break
+
+    # tm-score for this input
+    # print(f"TM-Scores: {tm_scores}")
+
+    # gdt_ts_score for this input
+    gdt_ts_score, threshold_details = calculate_gdt_ts(unstacked_true, unstacked_pred)
+    # print(f"GDT_TS Score: {gdt_ts_result:.2f}")
+    print(f"GDT_TS Score: {gdt_ts_score:.2f}")
+
+    return tm_scores
+
+
+
+
+def print_prediction(unstacked_true, unstacked_pred):
+  """
+  Display the result of our single prediction
+  """
+  for i in range(5):
+          for t, p in zip(unstacked_true[i, :, -5:], unstacked_pred[i, :, -5:]):
+              print(f'true: {t}')
+              print(f'pred: {p}')
+              print()
+          print()
+
+
+
+
+if __name__ == '__main__':
+    print(f'sys argv: {sys.argv}')
+    if len(sys.argv) > 1:
+        node_name = sys.argv[1]
+
+    else:
+        node_name = 'DH01A'
+
+    # ---------------------- Logging framework ----------------------
+    os.makedirs(f'Logs/{node_name}', exist_ok=True)
+    # 10MB handlers
+    file_handler = logging.handlers.RotatingFileHandler(f'Logs/{node_name}/Full_Log.log', maxBytes=10000000,
+                                                        backupCount=5)
+    file_handler.setLevel(logging.DEBUG)
+    # Starts each call as a new log!
+    file_handler.doRollover()
+
+    master_handler = logging.FileHandler(f'Logs/{node_name}/ERRORS.log', mode='w')
+    master_handler.setLevel(logging.WARNING)
+
+    logging.basicConfig(level=logging.DEBUG, handlers=[file_handler, master_handler],
+                        format='%(levelname)-8s: %(asctime)-22s %(module)-20s %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S | ')
+    logging.warning(f'starting with node: {node_name}')
+    logging.info(f'{sys.argv}')
+
+    print(f'Started with following system variables:')
+    print(f'{sys.argv}')
+    print(f'node_name: {node_name}')
+
+    # ---------------------- End Logging Framework ----------------------
+
+
+
+    # how large to step for each accuracy
+    step_size = 100
+    max = 4500
+    i = 0
+
+    train_acc = np.memmap(f'PDBs/accuracies/train', dtype='float32', mode='w+', shape=(9, max // step_size))
+    valid_acc = np.memmap(f'PDBs/accuracies/valid', dtype='float32', mode='w+', shape=(9, max // step_size))
+    # train_acc = np.zeros((9, max // step_size))
+    # valid_acc = np.zeros((9, max // step_size))
+
+    seq_train = np.load('PDBs/big_data/tests/in-train.npy', mmap_mode='r', allow_pickle=True)
+    tar_train = np.load('PDBs/big_data/tests/out-train.npy', mmap_mode='r', allow_pickle=True)
+    # only want the first 100 samples
+    # recall samples are stacked on top of one another
+    seq_train = seq_train[:1000 * 100]
+    tar_train = tar_train[:1000 * 100, :]
+
+    seq_valid = np.load('PDBs/big_data/tests/in-valid.npy', mmap_mode='r', allow_pickle=True)
+    tar_valid = np.load('PDBs/big_data/tests/out-valid.npy', mmap_mode='r', allow_pickle=True)
+
+    seq_valid = seq_valid[:1000 * 100]
+    tar_valid = tar_valid[:1000 * 100, :]
+
+
+    print(f'train acc: {train_acc.shape}')
+    for n in range(0, max, step_size):
+        print(f'n: {n}')
+        for node in range(9):
+            print(f'- Model {node + 1} n {n} -')
+            logging.info(f'- Model {node + 1} n {n} -')
+            torch.set_grad_enabled(False)
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            model = open_model(f'models/{node_name}/Save-{i}')
+
+            tm_scores = predict_codes(seq_train, tar_train, model)
+            avg_train = np.average(tm_scores)
+
+            tm_scores = predict_codes(seq_valid, tar_valid, model)
+            avg_valid = np.average(tm_scores)
+            # print(f'avg train score: {avg_train}')
+            print(f'avg train score: {avg_train}')
+            print(f'avg valid score: {avg_valid}')
+
+            train_acc[node, i] = avg_train
+            valid_acc[node, i] = avg_valid
+        logging.info(f'Added all nodes for iter {n}')
+        i += 1
+
+    # print(f'train accuracies: {train_acc}')
+    # print(f'valid accuracies: {valid_acc}')
+    np.save(f'PDBs/accuracies/train', allow_pickle=True, arr=train_acc)
+    np.save(f'PDBs/accuracies/valid', allow_pickle=True, arr=valid_acc)
