@@ -15,12 +15,19 @@ import logging
 import logging.handlers
 import time
 import sys
+import seaborn
+
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
 block_size = 1000
 os.makedirs(f'PDBs/accuracies', exist_ok=True)
+os.makedirs(f'PDBs/accuracies/train_acc', exist_ok=True)
+os.makedirs(f'PDBs/accuracies/valid_acc', exist_ok=True)
+os.makedirs(f'PDBs/accuracies/train_loss', exist_ok=True)
+os.makedirs(f'PDBs/accuracies/valid_loss', exist_ok=True)
 
 def open_model(model_dir):
     with torch.no_grad():
@@ -348,6 +355,38 @@ class ProteinStructurePredictor(nn.Module):
 
 
 
+class RMSDLoss(nn.Module):
+    def __init__(self):
+        super(RMSDLoss, self).__init__()
+
+    def forward(self, pred_coords, true_coords):
+        # Create a mask to ignore padded regions
+        mask = (true_coords.sum(dim=-1) != 0)  # Assuming padded coords are all zeros
+        # print(f'mask shape: {mask.shape}')
+        # mask shape: torch.Size([10, 1000])
+        # print(f'mask: {mask}')
+
+        # torch.Size([2, 463, 2430])
+        # pred_coords has size (batch, block, output)
+        # print(f'pred coords: {pred_coords.shape}')
+        # print(f'true coords: {true_coords.shape}')
+        # print(f'pred first: {pred_coords[1, 900, 85:90]}')
+        # print(f'true first: {true_coords[1, 900, 85:90]}')
+
+        # Apply the mask to both predicted and true coordinates
+        pred_coords_masked = pred_coords[mask]
+        true_coords_masked = true_coords[mask]
+
+        # print(f'pred second: {pred_coords[1, 900, 85:90]}')
+        # print(f'true second: {true_coords[1, 900, 85:90]}')
+        # print()
+
+
+        # Calculate RMSD only on the masked coordinates
+        diff = pred_coords_masked - true_coords_masked
+        rmsd_value = torch.sqrt(torch.mean(torch.sum(diff ** 2, dim=-1)))
+        return rmsd_value
+
 
 
 
@@ -497,6 +536,7 @@ def predict_codes(seq, tar, model):
 
     print(f'num proteins in sample: {seq.shape[0] // 1000}')
 
+    criterion = RMSDLoss()
 
     esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
     esm_batch_converter = esm_alphabet.get_batch_converter()
@@ -515,6 +555,7 @@ def predict_codes(seq, tar, model):
 
     num_batches = 10
     tm_scores = np.zeros((batch_size * num_batches))
+    losses = np.zeros((batch_size * num_batches))
     i = 0
     # for each batch...
     for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
@@ -545,6 +586,9 @@ def predict_codes(seq, tar, model):
         for j in range(B):
           tm_scores[i * batch_size + j] = calculate_tm_score(unstacked_true[j], unstacked_pred[j])
 
+        losses[i * batch_size:(i + 1) * batch_size] = criterion(coords_pred, coords_true).to('cpu')
+        # print(f'losses: {losses}')
+
         # increase our batch number, break if we've searched all batches!
         i += 1
         print(f'computed batch {i}')
@@ -559,7 +603,7 @@ def predict_codes(seq, tar, model):
     # print(f"GDT_TS Score: {gdt_ts_result:.2f}")
     print(f"GDT_TS Score: {gdt_ts_score:.2f}")
 
-    return tm_scores
+    return tm_scores, losses
 
 
 
@@ -611,14 +655,16 @@ if __name__ == '__main__':
     # ---------------------- End Logging Framework ----------------------
 
 
-
     # how large to step for each accuracy
-    step_size = 100
-    max = 4500
+    step_size = 10
+    max = 2000
     i = 0
 
-    train_acc = np.memmap(f'PDBs/accuracies/train', dtype='float32', mode='w+', shape=(9, max // step_size))
-    valid_acc = np.memmap(f'PDBs/accuracies/valid', dtype='float32', mode='w+', shape=(9, max // step_size))
+    train_acc = np.memmap(f'PDBs/accuracies/train_acc/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
+    valid_acc = np.memmap(f'PDBs/accuracies/valid_acc/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
+
+    train_loss = np.memmap(f'PDBs/accuracies/train_loss/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
+    valid_loss = np.memmap(f'PDBs/accuracies/valid_loss/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
     # train_acc = np.zeros((9, max // step_size))
     # valid_acc = np.zeros((9, max // step_size))
 
@@ -636,31 +682,57 @@ if __name__ == '__main__':
     tar_valid = tar_valid[:1000 * 100, :]
 
 
+    r = RMSDLoss()
     print(f'train acc: {train_acc.shape}')
     for n in range(0, max, step_size):
         print(f'n: {n}')
-        for node in range(9):
-            print(f'- Model {node + 1} n {n} -')
-            logging.info(f'- Model {node + 1} n {n} -')
-            torch.set_grad_enabled(False)
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            model = open_model(f'models/{node_name}/Save-{i}')
+        logging.info(f'- n {n} -')
+        torch.set_grad_enabled(False)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = open_model(f'models/{node_name}/Save-{i}')
 
-            tm_scores = predict_codes(seq_train, tar_train, model)
-            avg_train = np.average(tm_scores)
+        # calculate accuracy for training and validation
+        tm_scores, losses = predict_codes(seq_train, tar_train, model)
+        avg_train = np.average(tm_scores)
+        avg_tLoss = np.average(losses)
 
-            tm_scores = predict_codes(seq_valid, tar_valid, model)
-            avg_valid = np.average(tm_scores)
-            # print(f'avg train score: {avg_train}')
-            print(f'avg train score: {avg_train}')
-            print(f'avg valid score: {avg_valid}')
+        tm_scores, losses = predict_codes(seq_valid, tar_valid, model)
+        avg_valid = np.average(tm_scores)
+        avg_vLoss = np.average(losses)
 
-            train_acc[node, i] = avg_train
-            valid_acc[node, i] = avg_valid
+        # calculate loss for training and validation
+
+
+        # print(f'avg train score: {avg_train}')
+        print(f'avg train score: {avg_train}')
+        print(f'avg valid score: {avg_valid}')
+
+        train_acc[0, i] = avg_train
+        valid_acc[0, i] = avg_valid
+
+        train_loss[0, i] = avg_tLoss
+        valid_loss[0, i] = avg_vLoss
         logging.info(f'Added all nodes for iter {n}')
+        print()
         i += 1
 
     # print(f'train accuracies: {train_acc}')
     # print(f'valid accuracies: {valid_acc}')
-    np.save(f'PDBs/accuracies/train', allow_pickle=True, arr=train_acc)
-    np.save(f'PDBs/accuracies/valid', allow_pickle=True, arr=valid_acc)
+    np.save(f'PDBs/accuracies/train_acc/{node_name}', allow_pickle=True, arr=train_acc)
+    np.save(f'PDBs/accuracies/valid_acc/{node_name}', allow_pickle=True, arr=valid_acc)
+
+    np.save(f'PDBs/accuracies/train_loss/{node_name}', allow_pickle=True, arr=train_loss)
+    np.save(f'PDBs/accuracies/valid_loss/{node_name}', allow_pickle=True, arr=valid_loss)
+
+    # train_acc = np.load('PDBs/accuracies/train_acc/DH01A.npy', mmap_mode='r', allow_pickle=True)
+    # valid_acc = np.load('PDBs/accuracies/valid_acc/DH01A.npy', mmap_mode='r', allow_pickle=True)
+    #
+    # train_loss = np.load('PDBs/accuracies/train_loss/DH01A.npy', mmap_mode='r', allow_pickle=True)
+    # valid_loss = np.load('PDBs/accuracies/valid_loss/DH01A.npy', mmap_mode='r', allow_pickle=True)
+    #
+    # print(f'train acc: {train_acc}')
+    # print(f'valid acc: {valid_acc}')
+    #
+    # print(f'train loss: {train_loss}')
+    # print(f'valid loss: {valid_loss}')
+
