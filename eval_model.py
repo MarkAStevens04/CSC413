@@ -15,8 +15,8 @@ import logging
 import logging.handlers
 import time
 import sys
-# import seaborn as sns
-# import matplotlib.pyplot as plt
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
 logger = logging.getLogger(__name__)
@@ -694,11 +694,20 @@ def plot_acc_loss(node_name):
     train_loss = np.load(f'PDBs/accuracies/train_loss/{node_name}.npy', mmap_mode='r', allow_pickle=True)
     valid_loss = np.load(f'PDBs/accuracies/valid_loss/{node_name}.npy', mmap_mode='r', allow_pickle=True)
 
+
+    train_class = np.load(f'PDBs/accuracies/train_class/{node_name}.npy', mmap_mode='r', allow_pickle=True)[0, :]
+    valid_class = np.load(f'PDBs/accuracies/valid_class/{node_name}.npy', mmap_mode='r', allow_pickle=True)[0, :]
+
+    print(f'train class shape: {train_class.shape}')
+
     train_acc = train_acc.squeeze()
     valid_acc = valid_acc.squeeze()
 
     train_loss = train_loss.squeeze()
     valid_loss = valid_loss.squeeze()
+
+    train_class = train_class.squeeze()
+    valid_class = valid_class.squeeze()
 
     # t = np.arange(0, 2000, 10)
     # even though step size is 10, we only saved every 100 proteins, so each save represents 100 proteins.
@@ -716,15 +725,35 @@ def plot_acc_loss(node_name):
     plt.legend()
 
     plt.savefig(f'Results/2-{node_name}-Accuracy.png')
-    plt.figure(figsize=(8, 8))
+    # plt.figure(figsize=(8, 8))
+    fig, ax1 = plt.subplots(figsize=(8, 8))
 
-    plt.plot(t, train_loss, label=f'training')
-    plt.plot(t, valid_loss, label=f'validation')
+    color = 'tab:red'
+    color2 = 'lightcoral'
+    ax1.set_xlabel(f'Samples trained on')
+    ax1.set_ylabel(f'RMSD Loss', color=color)
+    ax1.plot(t, train_loss, label=f'Loss training', color=color2)
+    ax1.plot(t, valid_loss, label=f'Loss validation', color=color)
+    ax1.tick_params(axis='y', labelcolor=color)
+
+    ax2 = ax1.twinx()
+    color = 'blue'
+    color2 = 'lightblue'
+    ax2.set_ylabel(f'Classification Accuracy', color=color)
+    ax2.plot(t, train_class, label=f'Classification training', color=color2)
+    ax2.plot(t, valid_class, label=f'Classification validation', color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    fig.tight_layout()
+
+    # plt.plot(t, train_class, label=f'training classification')
+    # plt.plot(t, valid_class, label=f'validation classification')
 
     plt.title(f'Training Loss of model {node_name[-3:-1]}')
-    plt.xlabel(f'Samples trained on')
-    plt.ylabel(f'RMSD Loss')
     plt.legend()
+    # plt.xlabel(f'Samples trained on')
+    # plt.ylabel(f'RMSD Loss')
+    # plt.legend()
     plt.savefig(f'Results/2-{node_name}-Loss.png')
 
 
@@ -774,8 +803,8 @@ if __name__ == '__main__':
     train_loss = np.memmap(f'PDBs/accuracies/train_loss/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
     valid_loss = np.memmap(f'PDBs/accuracies/valid_loss/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
 
-    train_class = np.memmap(f'PDBs/accuracies/train_class/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
-    valid_class = np.memmap(f'PDBs/accuracies/valid_class/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
+    train_class = np.memmap(f'PDBs/accuracies/train_class/{node_name}', dtype='float32', mode='w+', shape=(2, max // step_size))
+    valid_class = np.memmap(f'PDBs/accuracies/valid_class/{node_name}', dtype='float32', mode='w+', shape=(2, max // step_size))
     # train_acc = np.zeros((9, max // step_size))
     # valid_acc = np.zeros((9, max // step_size))
 
@@ -839,73 +868,78 @@ if __name__ == '__main__':
 
 
 
-    r = RMSDLoss()
-    print(f'train acc: {train_acc.shape}')
-    for n in range(0, max, step_size):
-        print(f'n: {n}')
-        logging.info(f'- n {n} -')
-        torch.set_grad_enabled(False)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = open_model(f'models/{node_name}/Save-{i}')
+    # r = RMSDLoss()
+    # print(f'train acc: {train_acc.shape}')
+    # for n in range(0, max, step_size):
+    #     print(f'n: {n}')
+    #     logging.info(f'- n {n} -')
+    #     torch.set_grad_enabled(False)
+    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #     model = open_model(f'models/{node_name}/Save-{i}')
+    #
+    #     # calculate accuracy for training and validation
+    #     tm_scores, losses, gdts_t, class_t = predict_codes(seq_train, tar_train, model)
+    #     avg_train = np.average(tm_scores)
+    #     avg_tLoss = np.average(losses)
+    #     # avg_tGDT = np.average(gdts_t)
+    #     avg_tClass = np.average(class_t, axis=0)
+    #
+    #     tm_scores, losses, gdts_v, class_v = predict_codes(seq_valid, tar_valid, model)
+    #     avg_valid = np.average(tm_scores)
+    #     avg_vLoss = np.average(losses)
+    #     # avg_vGDT = np.average(gdts_v)
+    #     avg_vClass = np.average(class_v, axis=0)
+    #
+    #     # calculate loss for training and validation
+    #
+    #
+    #     # print(f'avg train score: {avg_train}')
+    #     print(f'avg train score: {avg_train}')
+    #     print(f'avg valid score: {avg_valid}')
+    #
+    #     train_acc[0, i] = avg_train
+    #     valid_acc[0, i] = avg_valid
+    #
+    #     train_loss[0, i] = avg_tLoss
+    #     valid_loss[0, i] = avg_vLoss
+    #
+    #     train_class[:, i] = avg_tClass
+    #     valid_class[:, i] = avg_vClass
+    #
+    #     logging.info(f'Added all nodes for iter {n}')
+    #     print()
+    #     i += 1
+    #
+    # # print(f'train accuracies: {train_acc}')
+    # # print(f'valid accuracies: {valid_acc}')
+    # np.save(f'PDBs/accuracies/train_acc/{node_name}', allow_pickle=True, arr=train_acc)
+    # np.save(f'PDBs/accuracies/valid_acc/{node_name}', allow_pickle=True, arr=valid_acc)
+    #
+    # np.save(f'PDBs/accuracies/train_loss/{node_name}', allow_pickle=True, arr=train_loss)
+    # np.save(f'PDBs/accuracies/valid_loss/{node_name}', allow_pickle=True, arr=valid_loss)
+    #
+    # np.save(f'PDBs/accuracies/train_class/{node_name}', allow_pickle=True, arr=train_class)
+    # np.save(f'PDBs/accuracies/valid_class/{node_name}', allow_pickle=True, arr=valid_class)
 
-        # calculate accuracy for training and validation
-        tm_scores, losses, gdts_t, class_t = predict_codes(seq_train, tar_train, model)
-        avg_train = np.average(tm_scores)
-        avg_tLoss = np.average(losses)
-        # avg_tGDT = np.average(gdts_t)
-        avg_tClass = np.average(class_t, axis=0)
 
-        tm_scores, losses, gdts_v, class_v = predict_codes(seq_valid, tar_valid, model)
-        avg_valid = np.average(tm_scores)
-        avg_vLoss = np.average(losses)
-        # avg_vGDT = np.average(gdts_v)
-        avg_vClass = np.average(class_v, axis=0)
-
-        # calculate loss for training and validation
-
-
-        # print(f'avg train score: {avg_train}')
-        print(f'avg train score: {avg_train}')
-        print(f'avg valid score: {avg_valid}')
-
-        train_acc[0, i] = avg_train
-        valid_acc[0, i] = avg_valid
-
-        train_loss[0, i] = avg_tLoss
-        valid_loss[0, i] = avg_vLoss
-        logging.info(f'Added all nodes for iter {n}')
-        print()
-        i += 1
-
-    # print(f'train accuracies: {train_acc}')
-    # print(f'valid accuracies: {valid_acc}')
-    np.save(f'PDBs/accuracies/train_acc/{node_name}', allow_pickle=True, arr=train_acc)
-    np.save(f'PDBs/accuracies/valid_acc/{node_name}', allow_pickle=True, arr=valid_acc)
-
-    np.save(f'PDBs/accuracies/train_loss/{node_name}', allow_pickle=True, arr=train_loss)
-    np.save(f'PDBs/accuracies/valid_loss/{node_name}', allow_pickle=True, arr=valid_loss)
-
-    np.save(f'PDBs/accuracies/train_class/{node_name}', allow_pickle=True, arr=train_class)
-    np.save(f'PDBs/accuracies/valid_class/{node_name}', allow_pickle=True, arr=valid_class)
-
-
-    # # ----------------------------- Plot accuracies and losses
-    # # train_acc = np.load('PDBs/accuracies/train_acc/DH01A.npy', mmap_mode='r', allow_pickle=True)
-    # # valid_acc = np.load('PDBs/accuracies/valid_acc/DH01A.npy', mmap_mode='r', allow_pickle=True)
-    # #
-    # # train_loss = np.load('PDBs/accuracies/train_loss/DH01A.npy', mmap_mode='r', allow_pickle=True)
-    # # valid_loss = np.load('PDBs/accuracies/valid_loss/DH01A.npy', mmap_mode='r', allow_pickle=True)
-    # #
-    # #
-    # # print(f'train acc: {train_acc}')
-    # # print(f'valid acc: {valid_acc}')
-    # #
-    # # print(f'train loss: {train_loss}')
-    # # print(f'valid loss: {valid_loss}')
+    # ----------------------------- Plot accuracies and losses
+    # train_acc = np.load('PDBs/accuracies/train_acc/DH01A.npy', mmap_mode='r', allow_pickle=True)
+    # valid_acc = np.load('PDBs/accuracies/valid_acc/DH01A.npy', mmap_mode='r', allow_pickle=True)
+    #
+    # train_loss = np.load('PDBs/accuracies/train_loss/DH01A.npy', mmap_mode='r', allow_pickle=True)
+    # valid_loss = np.load('PDBs/accuracies/valid_loss/DH01A.npy', mmap_mode='r', allow_pickle=True)
+    #
+    #
+    # print(f'train acc: {train_acc}')
+    # print(f'valid acc: {valid_acc}')
+    #
+    # print(f'train loss: {train_loss}')
+    # print(f'valid loss: {valid_loss}')
     # for i in range(9):
     #     i += 1
     #     name = f'DH0' + str(i) + 'A'
     #     plot_acc_loss(name)
-    # # plot_acc_loss('DH01A')
-    # # plt.show()
+    plot_acc_loss('DH08A')
+    # plot_acc_loss('DH01A')
+    # plt.show()
 
