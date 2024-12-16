@@ -1,6 +1,8 @@
 ![Alt text](logo.png?raw=true "Sigma Fold with 4 computer programmers")
 
-A transformer architecture, from start to finish.
+### Basic Overview
+Using RCSB data, train a transformer to predict protein structure & IDRs. Quickly evaluate models on array of performance metrics.
+
 
 # Overview of Files
 - **get_pdbs.py** : Download mmCif files, extract atom positions & protein sequence.
