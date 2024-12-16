@@ -427,8 +427,8 @@ def calculate_tm_score(true_coords, pred_coords, d0=None):
     - TM-score (float between 0 and 1)
     """
     # Ensure inputs are numpy arrays
-    true_coords = np.array(true_coords)[:, 1:2, :]
-    pred_coords = np.array(pred_coords)[:, 1:2, :]
+    true_coords = np.array(true_coords)
+    pred_coords = np.array(pred_coords)
     # print(f'true coords shape: {true_coords.shape}')
     # print(f'first 3: {true_coords[0, 1, -5:]} {true_coords[0, 1, 1]}')
 
@@ -501,6 +501,7 @@ def calculate_gdt_ts(true_coords, pred_coords, distance_thresholds=[1, 2, 4, 8])
     pred_coords = np.array(pred_coords)
 
 
+
     # get the lists of coordinates only for atoms that have a defined position
     known_aminos = np.argwhere(true_coords[:, :, -2] == 1)
 
@@ -520,7 +521,6 @@ def calculate_gdt_ts(true_coords, pred_coords, distance_thresholds=[1, 2, 4, 8])
         # Count points within the current threshold
         points_within_threshold = np.sum(distances <= threshold)
         threshold_counts.append(points_within_threshold)
-
     # Calculate GDT_TS score (average percentage of points within thresholds)
     total_points = known_true.shape[0]
     gdt_ts_percentages = [count / total_points * 100 for count in threshold_counts]
@@ -568,13 +568,14 @@ def predict_codes(seq, tar, model):
     data_size = seq.shape[0]
     dataset = ProteinStructureDataset(pdb_dir, esm_model, esm_batch_converter, seq, tar, device,
                                       num_training=data_size)
-    batch_size = 4
+    batch_size = 10
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=custom_collate_fn_two)
 
 
-    num_batches = 1
+    num_batches = 10
     tm_scores = np.zeros((batch_size * num_batches))
     losses = np.zeros((batch_size * num_batches))
+    gdts = np.zeros((batch_size * num_batches))
     i = 0
     # for each batch...
     for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
@@ -607,9 +608,14 @@ def predict_codes(seq, tar, model):
         # Calculate tm score for each protein in batch
         for j in range(B):
           tm_scores[i * batch_size + j] = calculate_tm_score(unstacked_true[j], unstacked_pred[j])
+          # Calculate GDT TS
+          gdt_ts_score, threshold_details = calculate_gdt_ts(unstacked_true[j], unstacked_pred[j])
+          gdts[i * batch_size + j] = gdt_ts_score
+          # print(f"GDT_TS Score: {gdt_ts_score:.2f}")
 
         losses[i * batch_size:(i + 1) * batch_size] = criterion(coords_pred, coords_true).to('cpu')
         # print(f'losses: {losses}')
+
 
         # increase our batch number, break if we've searched all batches!
         i += 1
@@ -620,12 +626,8 @@ def predict_codes(seq, tar, model):
     # tm-score for this input
     # print(f"TM-Scores: {tm_scores}")
 
-    # gdt_ts_score for this input
-    gdt_ts_score, threshold_details = calculate_gdt_ts(unstacked_true, unstacked_pred)
-    # print(f"GDT_TS Score: {gdt_ts_result:.2f}")
-    print(f"GDT_TS Score: {gdt_ts_score:.2f}")
 
-    return tm_scores, losses
+    return tm_scores, losses, gdts
 
 
 
@@ -731,8 +733,11 @@ if __name__ == '__main__':
     # train_acc = np.zeros((9, max // step_size))
     # valid_acc = np.zeros((9, max // step_size))
 
-    seq_train = np.load('PDBs/big_data/tests/in-train.npy', mmap_mode='r', allow_pickle=True)
-    tar_train = np.load('PDBs/big_data/tests/out-train.npy', mmap_mode='r', allow_pickle=True)
+    # seq_train = np.load('PDBs/big_data/tests/in-train.npy', mmap_mode='r', allow_pickle=True)
+    # tar_train = np.load('PDBs/big_data/tests/out-train.npy', mmap_mode='r', allow_pickle=True)
+
+    seq_train = np.load('PDBs/big_data/tests/train_manual-in.npy', mmap_mode='r', allow_pickle=True)
+    tar_train = np.load('PDBs/big_data/tests/train_manual-out.npy', mmap_mode='r', allow_pickle=True)
     # only want the first 100 samples
     # recall samples are stacked on top of one another
     seq_train = seq_train[:1000 * 100]
@@ -747,17 +752,32 @@ if __name__ == '__main__':
     # -------------------- Single prediction ----------------
     torch.set_grad_enabled(False)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = open_model(f'models/{node_name}/Save-500')
+    model = open_model(f'models/{node_name}/Save-2000')
 
     # calculate accuracy for training and validation
-    tm_scores, losses = predict_codes(seq_train, tar_train, model)
+    tm_scores, losses, gdts_t = predict_codes(seq_train, tar_train, model)
     avg_train = np.average(tm_scores)
     avg_tLoss = np.average(losses)
+    avg_tGDT = np.average(gdts_t)
+
+    tm_scores, losses, gdts_v = predict_codes(seq_valid, tar_valid, model)
+    avg_valid = np.average(tm_scores)
+    avg_vLoss = np.average(losses)
+    avg_vGDT = np.average(gdts_v)
 
     # calculate loss for training and validation
 
-    print(f'all train score: {tm_scores}')
+    # print(f'all train score: {tm_scores}')
     print(f'avg train score: {avg_train}')
+    print(f'avg train gdt: {avg_tGDT}')
+    print(f'training gdts: {gdts_t}')
+    print(f'train max gdt: {np.max(gdts_t)}')
+    print()
+
+    print(f'avg valid score: {avg_valid}')
+    print(f'avg valid gdt: {avg_vGDT}')
+    print(f'validation gdts: {gdts_v}')
+    print(f'valid max gdt: {np.max(gdts_v)}')
 
 
 
