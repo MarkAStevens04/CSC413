@@ -29,6 +29,8 @@ os.makedirs(f'PDBs/accuracies/train_acc', exist_ok=True)
 os.makedirs(f'PDBs/accuracies/valid_acc', exist_ok=True)
 os.makedirs(f'PDBs/accuracies/train_loss', exist_ok=True)
 os.makedirs(f'PDBs/accuracies/valid_loss', exist_ok=True)
+os.makedirs(f'PDBs/accuracies/train_class', exist_ok=True)
+os.makedirs(f'PDBs/accuracies/valid_class', exist_ok=True)
 
 def open_model(model_dir):
     with torch.no_grad():
@@ -537,7 +539,45 @@ def defined_accuracy(true, pred):
     :param tar:
     :return:
     """
-    pass
+    true_coords = np.array(true)
+    pred_coords = np.array(pred)
+
+    # get the lists of coordinates only for atoms that belong in the amino
+    known_aminos = np.argwhere(true_coords[:, :, -1] == 1)
+
+    known_true = true_coords[known_aminos[:, 0], known_aminos[:, 1], -5:]
+    known_pred = pred_coords[known_aminos[:, 0], known_aminos[:, 1], -5:]
+    # for i in known_aminos:
+    #     print(f'known: {true_coords[i[0], i[1], -5:]} {true_coords[i[0], i[1], 1]}')
+    #     print(f'pred : {pred_coords[i[0], i[1], -5:]} {pred_coords[i[0], i[1], 1]}')
+
+    # for j, k in zip(known_true, known_pred):
+    #     print(f'true: {j}')
+    #     print(f'pred: {k}')
+
+    condition1 = (known_true[:, -2] == 1)  # Condition: value in array1 == 1
+    condition2 = (known_pred[:, -2] > 0.5)  # Condition: value in array2 > 0.5
+
+    combined_condition = condition1 & condition2
+    yes_pos = np.sum(combined_condition)
+    total_y = np.sum(condition1)
+
+    condition1 = (known_true[:, -2] == 0)  # Condition: value in array1 == 1
+    condition2 = (known_pred[:, -2] < 0.5)  # Condition: value in array2 > 0.5
+
+    combined_condition = condition1 & condition2
+    no_neg = np.sum(combined_condition)
+    total_n = np.sum(condition1)
+
+
+    correct_pos = yes_pos / total_y
+    correct_neg = no_neg / total_n
+    # print(f'Correct Pos: {yes_pos / total_y}')
+    # print(f'Correct Neg: {no_neg / total_n}')
+
+    return correct_pos, correct_neg
+
+
 
 
 
@@ -576,6 +616,7 @@ def predict_codes(seq, tar, model):
     tm_scores = np.zeros((batch_size * num_batches))
     losses = np.zeros((batch_size * num_batches))
     gdts = np.zeros((batch_size * num_batches))
+    classifications = np.zeros((batch_size * num_batches, 2))
     i = 0
     # for each batch...
     for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
@@ -611,6 +652,8 @@ def predict_codes(seq, tar, model):
           # Calculate GDT TS
           gdt_ts_score, threshold_details = calculate_gdt_ts(unstacked_true[j], unstacked_pred[j])
           gdts[i * batch_size + j] = gdt_ts_score
+
+          classifications[i * batch_size + j, :] = defined_accuracy(unstacked_true[j], unstacked_pred[j])
           # print(f"GDT_TS Score: {gdt_ts_score:.2f}")
 
         losses[i * batch_size:(i + 1) * batch_size] = criterion(coords_pred, coords_true).to('cpu')
@@ -627,7 +670,7 @@ def predict_codes(seq, tar, model):
     # print(f"TM-Scores: {tm_scores}")
 
 
-    return tm_scores, losses, gdts
+    return tm_scores, losses, gdts, classifications
 
 
 
@@ -672,7 +715,7 @@ def plot_acc_loss(node_name):
     plt.ylabel(f'TM-score')
     plt.legend()
 
-    plt.savefig(f'Results/{node_name}-Accuracy.png')
+    plt.savefig(f'Results/2-{node_name}-Accuracy.png')
     plt.figure(figsize=(8, 8))
 
     plt.plot(t, train_loss, label=f'training')
@@ -682,7 +725,7 @@ def plot_acc_loss(node_name):
     plt.xlabel(f'Samples trained on')
     plt.ylabel(f'RMSD Loss')
     plt.legend()
-    plt.savefig(f'Results/{node_name}-Loss.png')
+    plt.savefig(f'Results/2-{node_name}-Loss.png')
 
 
 
@@ -730,14 +773,17 @@ if __name__ == '__main__':
 
     train_loss = np.memmap(f'PDBs/accuracies/train_loss/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
     valid_loss = np.memmap(f'PDBs/accuracies/valid_loss/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
+
+    train_class = np.memmap(f'PDBs/accuracies/train_class/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
+    valid_class = np.memmap(f'PDBs/accuracies/valid_class/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
     # train_acc = np.zeros((9, max // step_size))
     # valid_acc = np.zeros((9, max // step_size))
 
-    # seq_train = np.load('PDBs/big_data/tests/in-train.npy', mmap_mode='r', allow_pickle=True)
-    # tar_train = np.load('PDBs/big_data/tests/out-train.npy', mmap_mode='r', allow_pickle=True)
+    seq_train = np.load('PDBs/big_data/tests/in-train.npy', mmap_mode='r', allow_pickle=True)
+    tar_train = np.load('PDBs/big_data/tests/out-train.npy', mmap_mode='r', allow_pickle=True)
 
-    seq_train = np.load('PDBs/big_data/tests/train_manual-in.npy', mmap_mode='r', allow_pickle=True)
-    tar_train = np.load('PDBs/big_data/tests/train_manual-out.npy', mmap_mode='r', allow_pickle=True)
+    # seq_train = np.load('PDBs/big_data/tests/train_manual-in.npy', mmap_mode='r', allow_pickle=True)
+    # tar_train = np.load('PDBs/big_data/tests/train_manual-out.npy', mmap_mode='r', allow_pickle=True)
     # only want the first 100 samples
     # recall samples are stacked on top of one another
     seq_train = seq_train[:1000 * 100]
@@ -750,43 +796,45 @@ if __name__ == '__main__':
     tar_valid = tar_valid[:1000 * 100, :]
 
     # -------------------- Single prediction ----------------
-    torch.set_grad_enabled(False)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = open_model(f'models/{node_name}/Save-2000')
-
-    # calculate accuracy for training and validation
-    tm_scores, losses, gdts_t = predict_codes(seq_train, tar_train, model)
-    avg_train = np.average(tm_scores)
-    avg_tLoss = np.average(losses)
-    avg_tGDT = np.average(gdts_t)
-
-    tm_scores, losses, gdts_v = predict_codes(seq_valid, tar_valid, model)
-    avg_valid = np.average(tm_scores)
-    avg_vLoss = np.average(losses)
-    avg_vGDT = np.average(gdts_v)
-
-    # calculate loss for training and validation
-
-    # print(f'all train score: {tm_scores}')
-    print(f'avg train score: {avg_train}')
-    print(f'avg train gdt: {avg_tGDT}')
-    print(f'training gdts: {gdts_t}')
-    print(f'train max gdt: {np.max(gdts_t)}')
-    print()
-
-    print(f'avg valid score: {avg_valid}')
-    print(f'avg valid gdt: {avg_vGDT}')
-    print(f'validation gdts: {gdts_v}')
-    print(f'valid max gdt: {np.max(gdts_v)}')
-
-
-
-
-
-    pause
-
-
-
+    # torch.set_grad_enabled(False)
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # model = open_model(f'models/{node_name}/Save-2000')
+    #
+    # # calculate accuracy for training and validation
+    # tm_scores, losses, gdts_t, class_t = predict_codes(seq_train, tar_train, model)
+    # avg_train = np.average(tm_scores)
+    # avg_tLoss = np.average(losses)
+    # avg_tGDT = np.average(gdts_t)
+    # avg_tClass = np.average(class_t, axis=0)
+    #
+    # tm_scores, losses, gdts_v, class_v = predict_codes(seq_valid, tar_valid, model)
+    # avg_valid = np.average(tm_scores)
+    # avg_vLoss = np.average(losses)
+    # avg_vGDT = np.average(gdts_v)
+    # avg_vClass = np.average(class_v, axis=0)
+    #
+    #
+    # # calculate loss for training and validation
+    #
+    # # print(f'all train score: {tm_scores}')
+    # print(f'avg train score: {avg_train}')
+    # print(f'avg train gdt: {avg_tGDT}')
+    # print(f'train max gdt: {np.max(gdts_t)}')
+    # print(f'train classification: {avg_tClass}')
+    # # print(f'training gdts: {gdts_t}')
+    # # print(f'training classes: {class_t}')
+    #
+    # print()
+    #
+    # print(f'avg valid score: {avg_valid}')
+    # print(f'avg valid gdt: {avg_vGDT}')
+    # print(f'valid max gdt: {np.max(gdts_v)}')
+    # # print(f'validation gdts: {gdts_v}')
+    # print(f'valid classification: {avg_vClass}')
+    # # print(f'validation classes: {class_v}')
+    #
+    #
+    # pause
 
 
 
@@ -799,16 +847,19 @@ if __name__ == '__main__':
         torch.set_grad_enabled(False)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = open_model(f'models/{node_name}/Save-{i}')
-        # model = open_model(f'models/{node_name}/Save-500')
 
         # calculate accuracy for training and validation
-        tm_scores, losses = predict_codes(seq_train, tar_train, model)
+        tm_scores, losses, gdts_t, class_t = predict_codes(seq_train, tar_train, model)
         avg_train = np.average(tm_scores)
         avg_tLoss = np.average(losses)
+        # avg_tGDT = np.average(gdts_t)
+        avg_tClass = np.average(class_t, axis=0)
 
-        tm_scores, losses = predict_codes(seq_valid, tar_valid, model)
+        tm_scores, losses, gdts_v, class_v = predict_codes(seq_valid, tar_valid, model)
         avg_valid = np.average(tm_scores)
         avg_vLoss = np.average(losses)
+        # avg_vGDT = np.average(gdts_v)
+        avg_vClass = np.average(class_v, axis=0)
 
         # calculate loss for training and validation
 
@@ -833,6 +884,9 @@ if __name__ == '__main__':
 
     np.save(f'PDBs/accuracies/train_loss/{node_name}', allow_pickle=True, arr=train_loss)
     np.save(f'PDBs/accuracies/valid_loss/{node_name}', allow_pickle=True, arr=valid_loss)
+
+    np.save(f'PDBs/accuracies/train_class/{node_name}', allow_pickle=True, arr=train_class)
+    np.save(f'PDBs/accuracies/valid_class/{node_name}', allow_pickle=True, arr=valid_class)
 
 
     # # ----------------------------- Plot accuracies and losses

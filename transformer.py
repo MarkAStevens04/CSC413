@@ -759,7 +759,7 @@ class ProteinStructureDataset(Dataset):
             results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
         esm_emb = results["representations"][self.esm_model.num_layers]
         # print(f'embedded! {esm_emb.shape}')
-        # print(f'embedding shape: {esm_emb.shape}')
+        print(f'embedding shape: {esm_emb.shape}')
         return esm_emb
 
 
