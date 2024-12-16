@@ -519,7 +519,14 @@ def calculate_gdt_ts(true_coords, pred_coords, distance_thresholds=[1, 2, 4, 8])
 
 
 
-
+def defined_accuracy(true, pred):
+    """
+    Finds our model's accuracy in predicting whether atom has defined position
+    :param given:
+    :param tar:
+    :return:
+    """
+    pass
 
 
 
@@ -566,7 +573,7 @@ def predict_codes(seq, tar, model):
         s = time.time_ns()
         coords_pred = model(seq_emb)
         e = time.time_ns()
-        print(f'took: {e - s} nanoseconds')
+        # print(f'took: {e - s} nanoseconds')
 
         # bring true and predicted coordinates to cpu
         ct_cpu = coords_true.to('cpu')
