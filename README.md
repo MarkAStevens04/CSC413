@@ -71,6 +71,8 @@ To train a model, run `transformer.py`. If running from the terminal, you may op
   - Train our model exclusively on proteins which are shorter than our sequence length. Investigate what happens to model performance as the protein size increases.
 - Energy Minimization
   - Include an energy minimization step at the end to make results more reasonable.
+- Mutli-GPU runs
+  - Integrate RAY or other multi-node framework
 - Investigate Model Performance on:
   - Proteins in similar families
   - "Toy" models (Test model on simplest alpha helix, simplest beta sheet, etc.)
