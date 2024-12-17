@@ -64,6 +64,19 @@ To train a model, run `transformer.py`. If running from the terminal, you may op
 - **Model heads**: Number of heads in our multi-head transformer architecture.
 - **Model depth**: Number of attention heads we run successively.
 
+# Future Work
+- Rotation space
+  - Use relative rotations of bonds instead of absolute coordinates. Prevents punishing model for producing correct predictions which are just rotated.
+- Smaller proteins
+  - Train our model exclusively on proteins which are shorter than our sequence length. Investigate what happens to model performance as the protein size increases.
+- Energy Minimization
+  - Include an energy minimization step at the end to make results more reasonable.
+- Investigate Model Performance on:
+  - Proteins in similar families
+  - "Toy" models (Test model on simplest alpha helix, simplest beta sheet, etc.)
+  - IDR performance (augment model to not train on IDRs, but still interpret its output)
+
+
 # Contributors
 - 👨‍💻 Mark Stevens [@MarkAStevens04](https://github.com/MarkAStevens04)
 - 👩‍💻 Adelina Patlatii [@AdelinaPatlatii](https://github.com/AdelinaPatlatii)
