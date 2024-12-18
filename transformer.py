@@ -554,10 +554,7 @@ class ProteinStructureDataset(Dataset):
         seq = seq[None, :]
         esm_emb = self.to_embedding(seq)
 
-
         return esm_emb, coords
-
-
 
 
 
@@ -570,13 +567,13 @@ class ProteinStructureDataset(Dataset):
         :param indices:
         :return:
         """
-        # print(f'tokens: {tokens[0].shape}')
+        # Send tokens to correct device
         tokens = tokens.to(next(self.esm_model.parameters()).device)
+        # No gradient when getting these results
         with torch.no_grad():
             results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
         esm_emb = results["representations"][self.esm_model.num_layers]
-        # print(f'embedded! {esm_emb.shape}')
-        # print(f'embedding shape: {esm_emb.shape}')
+
         return esm_emb
 
 
@@ -592,19 +589,6 @@ class ProteinStructureDataset(Dataset):
         reshaped_target = target.reshape(N // 27, 27, M)  # Split into groups of 27 rows
         stacked_target = reshaped_target.transpose(0, 2, 1).reshape(N // 27, M * 27)
         return given, stacked_target
-
-    def three_letter_to_one(self, res_name):
-        mapping = {
-            'ALA':'A','CYS':'C','ASP':'D','GLU':'E','PHE':'F','GLY':'G','HIS':'H',
-            'ILE':'I','LYS':'K','LEU':'L','MET':'M','ASN':'N','PRO':'P','GLN':'Q',
-            'ARG':'R','SER':'S','THR':'T','VAL':'V','TRP':'W','TYR':'Y'
-        }
-        return mapping.get(res_name, None)
-
-
-
-
-
 
 
 
@@ -652,12 +636,6 @@ class MultiHeadAttention(nn.Module):
 
 
 
-
-
-
-
-
-
 class TransformerBlock(nn.Module):
     def __init__(self, embed_dim, num_heads, mlp_ratio=4.0, dropout=0.1):
         super(TransformerBlock, self).__init__()
@@ -685,9 +663,6 @@ class TransformerBlock(nn.Module):
 
 
 
-
-
-
 class CrossAttentionBlock(nn.Module):
     def __init__(self, embed_dim, num_heads, mlp_ratio=4.0, dropout=0.1):
         super(CrossAttentionBlock, self).__init__()
@@ -710,9 +685,6 @@ class CrossAttentionBlock(nn.Module):
         query = query + mlp_out
         query = self.ln2(query)
         return query
-
-
-
 
 
 
