@@ -10,6 +10,7 @@ Using RCSB data, train a transformer to predict protein structure & IDRs. Quickl
 - **parse_seq.py** : Align full protein sequence with known atom sequence. Data pre-processing.
 - **transformer.py** : Final data processing & Transformer training. Code for concurrent trainings & CUDA acceleration.
 - **eval_model.py** : Take model save-states & obtain training & validation accuracies at different time points.
+- **logging_setup.py** : Initialize & handle our logging framework
 
 # Highlights
 - Atom-Level Intrinsically Disordered Region Identification: 
