@@ -518,9 +518,10 @@ class ProteinStructureDataset(Dataset):
     """
     Handles our dataset!
     """
-    def __init__(self, esm_model, train_seq, train_tar, device, num_training):
+    def __init__(self, esm_model, esm_batch_converter, train_seq, train_tar, device, num_training):
         # ESM model gets us our embeddings from our tokenized sequence
         self.esm_model = esm_model
+        self.esm_batch_converter = None
         self.train_seq = train_seq
         self.train_tar = train_tar
         self.block_size = block_size
@@ -533,21 +534,21 @@ class ProteinStructureDataset(Dataset):
 
         logger.info(f'Training size: {num_training}')
 
-    def set_batch_size(self, batch_size):
-        self.batch_size = batch_size
-        self.num_batches = self.num_training // self.batch_size
-        # print(f'self starts: {self.starts}')
-        self.update_batches()
-
-    def update_batches(self):
-        self.random_seq = torch.randint(self.starts.shape[0], (self.starts.shape[0],))
-        # indices = np.linspace(0, self.starts.shape[0])
-        indices = np.arange(0, self.starts.shape[0], step=1)
-        np.random.shuffle(indices)
-        # print(f'indices: {indices}')
-        # print(f'batch size: {self.batch_size}')
-        self.batches = torch.split(torch.from_numpy(indices), self.batch_size)
-        # print(f'self.batches: {self.batches}')
+    # def set_batch_size(self, batch_size):
+    #     self.batch_size = batch_size
+    #     self.num_batches = self.num_training // self.batch_size
+    #     # print(f'self starts: {self.starts}')
+    #     self.update_batches()
+    #
+    # def update_batches(self):
+    #     self.random_seq = torch.randint(self.starts.shape[0], (self.starts.shape[0],))
+    #     # indices = np.linspace(0, self.starts.shape[0])
+    #     indices = np.arange(0, self.starts.shape[0], step=1)
+    #     np.random.shuffle(indices)
+    #     # print(f'indices: {indices}')
+    #     # print(f'batch size: {self.batch_size}')
+    #     self.batches = torch.split(torch.from_numpy(indices), self.batch_size)
+    #     # print(f'self.batches: {self.batches}')
 
     def __len__(self):
         return self.num_training
@@ -941,7 +942,7 @@ def train_model(model,
     m = 0 #Tracks the save state of our model!
     # Create DataLoader
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=custom_collate_fn_two)
-    dataset.set_batch_size(batch_size)
+    # dataset.set_batch_size(batch_size)
     model.train()
     model.to(device)
 
@@ -1104,12 +1105,12 @@ if __name__ == "__main__":
 
 
     esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
-    # esm_batch_converter = esm_alphabet.get_batch_converter()
+    esm_batch_converter = esm_alphabet.get_batch_converter()
     esm_model.eval()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     esm_model = esm_model.to(device)
 
-    dataset = ProteinStructureDataset(esm_model, train_seq, train_tar, device, num_training=int(data_size * 0.8))
+    dataset = ProteinStructureDataset(esm_model, esm_batch_converter, train_seq, train_tar, device, num_training=int(data_size * 0.8))
     model = ProteinStructurePredictor(embed_dim=esm_model.embed_dim, depth=depth, num_heads=num_heads, mlp_ratio=4.0)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
