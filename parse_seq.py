@@ -5,10 +5,11 @@ import amino_expert
 import numpy as np
 import time
 import os
+from logging_setup import get_protein_filter
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
+protein_log = get_protein_filter()
 
 
 class Sequence_Parser():

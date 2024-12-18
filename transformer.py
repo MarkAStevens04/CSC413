@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 import torch
 import logging
 import logging.handlers
-import multiprocessing_logging
+from logging_setup import get_protein_filter, setup_logger
 import time
 import parse_seq
 import sys
@@ -25,8 +25,12 @@ esm_batch_converter = esm_alphabet.get_batch_converter()
 block_size = 1000
 
 
+
+
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
 
 
 def setup(node_name=None):
@@ -1132,24 +1136,10 @@ if __name__ == "__main__":
         depth = 4
 
     setup(node_name=node_name)
+    logger = setup_logger(node_name=node_name)
 
+    # logger.addFilter(protein_log)
 
-    # ---------------------- Logging framework ----------------------
-    # 10MB handlers
-    file_handler = logging.handlers.RotatingFileHandler(f'Logs/{node_name}/Full_Log.log', maxBytes=10000000,
-                                                        backupCount=5)
-    file_handler.setLevel(logging.DEBUG)
-    # Starts each call as a new log!
-    file_handler.doRollover()
-
-    master_handler = logging.FileHandler(f'Logs/{node_name}/ERRORS.log', mode='w')
-    master_handler.setLevel(logging.WARNING)
-
-    logging.basicConfig(level=logging.DEBUG, handlers=[master_handler, file_handler],
-                        format='%(levelname)-8s: %(asctime)-22s %(module)-20s %(message)s',
-                        datefmt='%Y-%m-%d %H:%M:%S | ')
-
-    multiprocessing_logging.install_mp_handler()
 
     logger.info(f'Started with following system variables:')
     logger.info(f'{sys.argv}')
