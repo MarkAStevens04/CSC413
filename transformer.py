@@ -885,26 +885,38 @@ def unstack(coords):
 
 
 
-
-
-
-
-
-if __name__ == "__main__":
-    # System arguments: Node name, reprocess, data size, num_heads, depth!
-    if len(sys.argv) > 1:
-        node_name = sys.argv[1]
-        reprocess = sys.argv[2]
+def process_sys_args(args):
+    """
+    Processes system arguments and handles gracefully when not correct
+    :param args:
+    :return:
+    """
+    if len(args) > 1:
+        node_name = args[1]
+        reprocess = args[2]
         try:
-            data_size = int(sys.argv[3])
+            data_size = int(args[3])
         except:
             data_size = 10
         try:
-            num_heads = int(sys.argv[4])
-            depth = int(sys.argv[5])
+            num_heads = int(args[4])
         except:
             num_heads = 8
+
+        try:
+            depth = int(args[5])
+        except:
             depth = 4
+
+        try:
+            batch_size = int(args[6])
+        except:
+            batch_size = 10
+
+        try:
+            num_epochs = int(args[7])
+        except:
+            num_epochs = 100
 
     else:
         node_name = 'Default'
@@ -912,6 +924,53 @@ if __name__ == "__main__":
         data_size = 10
         num_heads = 8
         depth = 4
+        batch_size = 10
+        num_epochs = 100
+
+    return node_name, reprocess, data_size, num_heads, depth, batch_size, num_epochs
+
+
+
+
+
+if __name__ == "__main__":
+    # System arguments: Node name, reprocess, data size, num_heads, depth, batch_size, num_epochs!
+    node_name, reprocess, data_size, num_heads, depth, batch_size, num_epochs = process_sys_args(sys.argv)
+    # if len(sys.argv) > 1:
+    #     node_name = sys.argv[1]
+    #     reprocess = sys.argv[2]
+    #     try:
+    #         data_size = int(sys.argv[3])
+    #     except:
+    #         data_size = 10
+    #     try:
+    #         num_heads = int(sys.argv[4])
+    #     except:
+    #         num_heads = 8
+    #
+    #     try:
+    #         depth = int(sys.argv[5])
+    #     except:
+    #         depth = 4
+    #
+    #     try:
+    #         batch_size = int(sys.argv[6])
+    #     except:
+    #         batch_size = 10
+    #
+    #     try:
+    #         num_epochs = int(sys.argv[7])
+    #     except:
+    #         num_epochs = 100
+    #
+    # else:
+    #     node_name = 'Default'
+    #     reprocess = 't'
+    #     data_size = 10
+    #     num_heads = 8
+    #     depth = 4
+    #     batch_size = 10
+    #     num_epochs = 100
 
     setup(node_name=node_name)
     logger = setup_logger(node_name=node_name)
@@ -921,10 +980,12 @@ if __name__ == "__main__":
 
     logger.info(f'Started with following system variables:')
     logger.info(f'{sys.argv}')
-    logger.info(f'node_name: {node_name}')
-    logger.info(f'reprocess: {reprocess}')
-    logger.info(f'num_heads: {num_heads}')
-    logger.info(f'depth: {depth}')
+    logger.info(f'node_name:  {node_name}')
+    logger.info(f'reprocess:  {reprocess}')
+    logger.info(f'num_heads:  {num_heads}')
+    logger.info(f'depth:      {depth}')
+    logger.info(f'batch_size: {batch_size}')
+    logger.info(f'num_epochs: {num_epochs}')
 
 
     print(f'node_name: {node_name}')
@@ -1024,7 +1085,7 @@ if __name__ == "__main__":
 
 
 
-    train_model(model, dataset, criterion, optimizer, epochs=10, batch_size=2, shuffle=True, device=device,
+    train_model(model, dataset, criterion, optimizer, epochs=num_epochs, batch_size=batch_size, shuffle=True, device=device,
                 print_interval=50, save_after=100, save_loc=f'models/{node_name}/Save')
 
     # Run a single example to evaluate our predictions!
