@@ -9,7 +9,7 @@ class ProteinLogFilter(logging.Filter):
     """
     def __init__(self):
         super().__init__()
-        self.protein_code = '----'
+        self.protein_code = '    '
 
     def change_protein_code(self, code):
         self.protein_code = code.upper()
@@ -19,7 +19,7 @@ class ProteinLogFilter(logging.Filter):
         Makes protein code a default value
         :return:
         """
-        self.protein_code = '----'
+        self.protein_code = '    '
 
     def filter(self, record):
         record.protein_code = self.protein_code
@@ -51,7 +51,7 @@ def setup_logger(node_name='DEFAULT'):
     master_handler.setLevel(logging.WARNING)
 
     logging.basicConfig(level=logging.DEBUG, handlers=[master_handler, file_handler],
-                        format='%(levelname)-8s: %(asctime)-22s %(module)-20s %(protein_code)-4s %(message)s',
+                        format='%(levelname)-8s: %(asctime)-22s %(module)-15s %(protein_code)-4s - %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S | ')
     # Create and return the logger
     logger = logging.getLogger("protein_logger")
@@ -67,5 +67,10 @@ def get_logger():
     return logging.getLogger("protein_logger")
 
 
-def change_code(code='----'):
+def change_log_code(code='    '):
+    """
+    Changes the 4-letter protein code for the global logger
+    :param code:
+    :return:
+    """
     get_protein_filter(get_logger()).change_protein_code(code)

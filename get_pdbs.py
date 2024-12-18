@@ -17,7 +17,7 @@ import logging.handlers
 from Bio.SeqUtils import seq1
 import re
 from Bio.PDB.mmcifio import MMCIFIO
-from logging_setup import get_logger, change_code
+from logging_setup import get_logger, change_log_code
 
 logger = get_logger()
 logger.setLevel(logging.DEBUG)
@@ -337,6 +337,7 @@ def get_structs(names):
     sequences = []
     # for every mmCif file and associated directory...
     for pid_file, name in zip(files, names):
+        change_log_code(name[-8:-4])
         # extract the mmCif dictionary to extract specific attributes
         pdb_info = MMCIF2Dict(name)
 
@@ -439,6 +440,7 @@ def get_structs(names):
             sequences.append(ptein_entry)
         else:
             logger.error(f'Invalid Protein!! {name}')
+    change_log_code()
     return sequences
 
 

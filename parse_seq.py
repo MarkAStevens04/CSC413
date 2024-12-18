@@ -4,7 +4,7 @@ import logging.handlers
 import amino_expert
 import numpy as np
 import time
-from logging_setup import get_logger, get_protein_filter
+from logging_setup import get_logger, change_log_code
 
 
 logger = get_logger()
@@ -61,6 +61,7 @@ class Sequence_Parser():
 
             # n[0] is actually directory to mmCif file. We extract the last 4 characters before the extension.
             code = n[0][-8:-4]
+            change_log_code(code)
             # Store the reference and positional sequences
             ref_seq = n[1]
             pos_seq = n[2]
@@ -91,6 +92,7 @@ class Sequence_Parser():
                 # print(f"modi ref seq: {new_ref}")
                 # print(f"verify seque: {len(new_ref) * 27}, {target.shape[0]}")
                 # np.save(f'')
+        change_log_code()
 
 
 

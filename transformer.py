@@ -12,7 +12,7 @@ import random
 from torch.utils.data import DataLoader
 import torch
 import logging
-from logging_setup import get_logger, setup_logger, change_code
+from logging_setup import get_logger, setup_logger, change_log_code
 import time
 import parse_seq
 import sys
@@ -216,6 +216,7 @@ class protein_unifier():
 
         # for t, i in enumerate(self.in_file):
         #     print(f'line {t}: {i}')
+        change_log_code()
 
 
         np.save(f'{self.save_path}in-{name}', allow_pickle=True, arr=self.in_file)
@@ -363,7 +364,7 @@ def process_data(max_proteins=1000):
     # Saves processed data into proteins_cleaned under test, train, and valid
     pu = protein_unifier(len(train_codes), name='train')
     for i, code in enumerate(train_codes):
-        change_code(code)
+        change_log_code(code)
         try:
             print(f'Saved one! {code} {round(((i / len(train_codes)) * 100), 2)}')
             given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
@@ -398,6 +399,7 @@ def process_data(max_proteins=1000):
 
     pu = protein_unifier(len(valid_codes), name='valid')
     for code in valid_codes:
+        change_log_code(code)
         given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
         target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
 
@@ -423,6 +425,7 @@ def process_data(max_proteins=1000):
 
     pu = protein_unifier(len(test_codes), name='test')
     for code in test_codes:
+        change_log_code(code)
         given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
         target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
 
@@ -444,6 +447,7 @@ def process_data(max_proteins=1000):
         pu.add_protein(g, t)
     # print(pu)
     pu.save('test')
+    change_log_code()
 
 
 
@@ -1167,7 +1171,7 @@ if __name__ == "__main__":
 
     start = time.time()
     if reprocess.lower() == 't':
-        logger.warning(f' ------------------------- Beginning Parsing Sequences ------------------------- ')
+        logger.warning(f'------------------------- Beginning Parsing Sequences ------------------------- ')
         a = parse_seq.Sequence_Parser(max_samples=data_size)
         # a.parse_names(['6XTB'])
         print(a.e.encode)
@@ -1177,11 +1181,11 @@ if __name__ == "__main__":
         # logging.info(f'Took {time.time() - start} seconds!!!')
         logger.warning(f'Complete! Took {time.time() - start} seconds!!!')
 
-        logger.warning(' --------------------------------- Begin Processing Data ---------------------------------------- ')
+        logger.warning('--------------------------------- Begin Processing Data ---------------------------------------- ')
 
         process_data(max_proteins=data_size)
 
-    logger.warning(' --------------------------------- Begin Transformer ---------------------------------------- ')
+    logger.warning('--------------------------------- Begin Transformer ---------------------------------------- ')
     output_len = 2430
 
     train_seq = np.load('PDBs/big_data/in-train.npy', mmap_mode='r', allow_pickle=True)
