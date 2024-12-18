@@ -167,4 +167,5 @@ PDBs/big_data
 Logs/
 models/
 trial_tracker.txt
+accuracies/
 

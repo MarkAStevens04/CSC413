@@ -37,6 +37,7 @@ def setup(node_name=None):
     os.makedirs(f'PDBs/big_data', exist_ok=True)
     os.makedirs(f'PDBs/pre_processed_data', exist_ok=True)
     os.makedirs(f'PDBs/Residues', exist_ok=True)
+    os.makedirs(f'PDBs/accuracies', exist_ok=True)
 
     # Download standard aminos if not already downloaded
     if len([name for name in os.listdir('PDBs/Residues')]) == 0:
@@ -532,6 +533,7 @@ class ProteinStructureDataset(Dataset):
         self.num_training = num_training
 
         logger.info(f'Training size: {num_training}')
+        print(f'Training size: {num_training}')
 
 
     def __len__(self):
@@ -737,41 +739,89 @@ class RMSDLoss(nn.Module):
         super(RMSDLoss, self).__init__()
 
     def forward(self, pred_coords, true_coords):
-        # Create a mask to ignore padded regions
+        # # Create a mask to ignore padded regions
         # mask = (true_coords.sum(dim=-1) != 0)  # Assuming padded coords are all zeros
-        # mask_two = (true_coords[:, :, 83] != 0)
-        mask = (true_coords[:, :, 83] != 0)
-        # print(f'mask shape: {mask.shape}')
-        # # mask shape: torch.Size([10, 1000])
-        # print(f'mask: {mask}')
-        # print(f'mask_two: {mask_two}')
-        # print(f'mask_two shape: {mask_two.shape}')
-        # print(f'true coords shape: {true_coords.shape}')
-        # false_indices = torch.where(mask_two == False)[1]
+        # # mask_two = (true_coords[:, :, 83] != 0)
         #
-        # print(false_indices[840:900])
-        # print(f'false indices shape: {false_indices.shape}')
-
-        # torch.Size([2, 463, 2430])
-        # pred_coords has size (batch, block, output)
+        # # mask = (true_coords[:, :, 83] != 0)
+        #
+        # print(f'mask shape: {mask.shape}')
+        # # # mask shape: torch.Size([10, 1000])
+        # # print(f'mask: {mask}')
+        # # print(f'mask_two: {mask_two}')
+        # # print(f'mask_two shape: {mask_two.shape}')
+        # # print(f'true coords shape: {true_coords.shape}')
+        # # false_indices = torch.where(mask_two == False)[1]
+        # #
+        # # print(false_indices[840:900])
+        # # print(f'false indices shape: {false_indices.shape}')
+        #
+        # # torch.Size([2, 463, 2430])
+        # # pred_coords has size (batch, block, output)
+        # # print(f'pred coords: {pred_coords.shape}')
+        # # print(f'true coords: {true_coords.shape}')
+        # # print(f'pred first: {pred_coords[1, 900, 85:90]}')
+        # # print(f'true first: {true_coords[1, 900, 85:90]}')
+        #
+        # # Apply the mask to both predicted and true coordinates
+        # pred_coords_masked = pred_coords[mask]
+        # true_coords_masked = true_coords[mask]
+        # print(f'pred coords masked: {pred_coords_masked.shape}')
         # print(f'pred coords: {pred_coords.shape}')
-        # print(f'true coords: {true_coords.shape}')
-        # print(f'pred first: {pred_coords[1, 900, 85:90]}')
-        # print(f'true first: {true_coords[1, 900, 85:90]}')
+        # diff = pred_coords_masked - true_coords_masked
+        # rmsd_value = torch.sqrt(torch.mean(torch.sum(diff ** 2, dim=-1)))
+        # print(f'rmsd: {rmsd_value}')
+        # print(f'rmsd shape: {rmsd_value.shape}')
+
+        mask = true_coords[:, :, 83] != 1  # shape: (Batch, Sequence Length)
 
         # Apply the mask to both predicted and true coordinates
+        # We will use the mask to keep the rows where dimension 83 is not 1
         pred_coords_masked = pred_coords[mask]
         true_coords_masked = true_coords[mask]
 
-        # print(f'pred second: {pred_coords[1, 900, 85:90]}')
-        # print(f'true second: {true_coords[1, 900, 85:90]}')
-        # print()
+        # Compute the squared differences
+        diff = pred_coords_masked - true_coords_masked  # shape: (valid points, Dimension)
+        squared_diff = diff ** 2  # element-wise squared differences
+
+        # Sum the squared differences across the dimensions (axis=-1)
+        squared_diff_sum = squared_diff.sum(dim=-1)  # sum over the dimension axis
+
+        # Sum across the batch and sequence length axis
+        total_squared_diff = squared_diff_sum.sum()  # sum over all points
+
+        # Get the number of valid points
+        num_valid_points = mask.sum().item()
+
+        # Compute the RMSD
+        rmsd = torch.sqrt(total_squared_diff / num_valid_points)
+
+        return rmsd
 
 
-        # Calculate RMSD only on the masked coordinates
-        diff = pred_coords_masked - true_coords_masked
-        rmsd_value = torch.sqrt(torch.mean(torch.sum(diff ** 2, dim=-1)))
-        return rmsd_value
+
+
+
+
+        # # Updated:
+        # # pred coords masked: torch.Size([8, 2430])
+        # # pred coords: torch.Size([8, 1000, 2430])
+        # # mask shape: torch.Size([8, 1000])
+        #
+        # # Old:
+        # # pred coords masked: torch.Size([8000, 2430])
+        # # pred coords: torch.Size([8, 1000, 2430])
+        # # mask shape: torch.Size([8, 1000])
+        #
+        # # print(f'pred second: {pred_coords[1, 900, 85:90]}')
+        # # print(f'true second: {true_coords[1, 900, 85:90]}')
+        # # print()
+        #
+        #
+        # # Calculate RMSD only on the masked coordinates
+        # diff = pred_coords_masked - true_coords_masked
+        # rmsd_value = torch.sqrt(torch.mean(torch.sum(diff ** 2, dim=-1)))
+        # return rmsd_value
 
 
 
@@ -819,10 +869,7 @@ def train_model(model,
     for epoch in range(epochs):
         epoch_loss = 0.0
         for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
-            # print(f'something returned')
-            # print(f'seq_emb shape: {seq_emb.shape}')
-            # print(f'coord_true sha: {coords_true.shape}')
-            # print(f'coord_true: {coords_true[5, 50:55, 87]}')
+            # Move samples to graphics card (or cpu)
             seq_emb = seq_emb.to(device)  # [B, L, D]
             coords_true = coords_true.to(device)  # [B, L, 3]
 
@@ -863,24 +910,17 @@ def train_model(model,
 
 
 def unstack(coords):
-    """
-    Unstacks the coordinates
+    """ Puts each atom back into its own row.
+
+    Unstacks the coordinates from (N, 2430) to (M, 90).
     """
     N, M = coords.shape
     N = N * 27
     M = M // 27
+    
     coords = coords.detach().numpy()
-    # reshaped_parts = coords.reshape(N // 27, 27, M)
-    # original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
-
     reshaped_parts = coords.reshape(N // 27, 27, M)
-    # original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
 
-    # How we stack:
-    # reshaped_target = target.reshape(N // 27, 27, M)  # Split into groups of 27 rows
-    # stacked_target = reshaped_target.reshape(N // 27, M * 27)
-    # original_array = reshaped_parts.transpose(0, 2, 1).reshape(N, M)
-    # return original_array
     return reshaped_parts
 
 
@@ -921,10 +961,10 @@ def process_sys_args(args):
     else:
         node_name = 'Default'
         reprocess = 't'
-        data_size = 10
+        data_size = 4
         num_heads = 8
         depth = 4
-        batch_size = 10
+        batch_size = 2
         num_epochs = 100
 
     return node_name, reprocess, data_size, num_heads, depth, batch_size, num_epochs

@@ -17,6 +17,7 @@ import time
 import sys
 import seaborn as sns
 import matplotlib.pyplot as plt
+from transformer import RMSDLoss
 
 
 logger = logging.getLogger(__name__)
@@ -358,37 +359,37 @@ class ProteinStructurePredictor(nn.Module):
 
 
 
-class RMSDLoss(nn.Module):
-    def __init__(self):
-        super(RMSDLoss, self).__init__()
-
-    def forward(self, pred_coords, true_coords):
-        # Create a mask to ignore padded regions
-        mask = (true_coords.sum(dim=-1) != 0)  # Assuming padded coords are all zeros
-        # print(f'mask shape: {mask.shape}')
-        # mask shape: torch.Size([10, 1000])
-        # print(f'mask: {mask}')
-
-        # torch.Size([2, 463, 2430])
-        # pred_coords has size (batch, block, output)
-        # print(f'pred coords: {pred_coords.shape}')
-        # print(f'true coords: {true_coords.shape}')
-        # print(f'pred first: {pred_coords[1, 900, 85:90]}')
-        # print(f'true first: {true_coords[1, 900, 85:90]}')
-
-        # Apply the mask to both predicted and true coordinates
-        pred_coords_masked = pred_coords[mask]
-        true_coords_masked = true_coords[mask]
-
-        # print(f'pred second: {pred_coords[1, 900, 85:90]}')
-        # print(f'true second: {true_coords[1, 900, 85:90]}')
-        # print()
-
-
-        # Calculate RMSD only on the masked coordinates
-        diff = pred_coords_masked - true_coords_masked
-        rmsd_value = torch.sqrt(torch.mean(torch.sum(diff ** 2, dim=-1)))
-        return rmsd_value
+# class RMSDLoss(nn.Module):
+#     def __init__(self):
+#         super(RMSDLoss, self).__init__()
+#
+#     def forward(self, pred_coords, true_coords):
+#         # Create a mask to ignore padded regions
+#         mask = (true_coords.sum(dim=-1) != 0)  # Assuming padded coords are all zeros
+#         # print(f'mask shape: {mask.shape}')
+#         # mask shape: torch.Size([10, 1000])
+#         # print(f'mask: {mask}')
+#
+#         # torch.Size([2, 463, 2430])
+#         # pred_coords has size (batch, block, output)
+#         # print(f'pred coords: {pred_coords.shape}')
+#         # print(f'true coords: {true_coords.shape}')
+#         # print(f'pred first: {pred_coords[1, 900, 85:90]}')
+#         # print(f'true first: {true_coords[1, 900, 85:90]}')
+#
+#         # Apply the mask to both predicted and true coordinates
+#         pred_coords_masked = pred_coords[mask]
+#         true_coords_masked = true_coords[mask]
+#
+#         # print(f'pred second: {pred_coords[1, 900, 85:90]}')
+#         # print(f'true second: {true_coords[1, 900, 85:90]}')
+#         # print()
+#
+#
+#         # Calculate RMSD only on the masked coordinates
+#         diff = pred_coords_masked - true_coords_masked
+#         rmsd_value = torch.sqrt(torch.mean(torch.sum(diff ** 2, dim=-1)))
+#         return rmsd_value
 
 
 
@@ -712,7 +713,8 @@ def plot_acc_loss(node_name):
     # t = np.arange(0, 2000, 10)
     # even though step size is 10, we only saved every 100 proteins, so each save represents 100 proteins.
     # 100 * 10 = 1000
-    t = np.arange(0, 2000 * 100, 10 * 100)
+    # t = np.arange(0, 2000 * 100, 10 * 100)
+    t = np.arange(0, 100, 1)
 
     plt.figure(figsize=(10, 10))
 
@@ -758,58 +760,38 @@ def plot_acc_loss(node_name):
 
 
 
-
-if __name__ == '__main__':
-    print(f'sys argv: {sys.argv}')
-    if len(sys.argv) > 1:
-        node_name = sys.argv[1]
-
-    else:
-        node_name = 'DH01A'
-
-    # ---------------------- Logging framework ----------------------
-    os.makedirs(f'Logs/{node_name}', exist_ok=True)
-    # 10MB handlers
-    file_handler = logging.handlers.RotatingFileHandler(f'Logs/{node_name}/Full_Log.log', maxBytes=10000000,
-                                                        backupCount=5)
-    file_handler.setLevel(logging.DEBUG)
-    # Starts each call as a new log!
-    file_handler.doRollover()
-
-    master_handler = logging.FileHandler(f'Logs/{node_name}/ERRORS.log', mode='w')
-    master_handler.setLevel(logging.WARNING)
-
-    logging.basicConfig(level=logging.DEBUG, handlers=[file_handler, master_handler],
-                        format='%(levelname)-8s: %(asctime)-22s %(module)-20s %(message)s',
-                        datefmt='%Y-%m-%d %H:%M:%S | ')
-    logging.warning(f'starting with node: {node_name}')
-    logging.info(f'{sys.argv}')
-
-    print(f'Started with following system variables:')
-    print(f'{sys.argv}')
-    print(f'node_name: {node_name}')
-
-    # ---------------------- End Logging Framework ----------------------
-
+def compute_accuracies(node_name):
+    """
+    Computes the accuracies retroactively by using the models stored in models/node_name
+    :param node_name:
+    :return:
+    """
 
     # how large to step for each accuracy
-    step_size = 10
-    max = 2000
+    step_size = 1
+    max = 100
     i = 0
 
-    train_acc = np.memmap(f'PDBs/accuracies/train_acc/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
-    valid_acc = np.memmap(f'PDBs/accuracies/valid_acc/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
+    # Create memory maps!
+    train_acc = np.memmap(f'PDBs/accuracies/train_acc/{node_name}', dtype='float32', mode='w+',
+                          shape=(1, max // step_size))
+    valid_acc = np.memmap(f'PDBs/accuracies/valid_acc/{node_name}', dtype='float32', mode='w+',
+                          shape=(1, max // step_size))
 
-    train_loss = np.memmap(f'PDBs/accuracies/train_loss/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
-    valid_loss = np.memmap(f'PDBs/accuracies/valid_loss/{node_name}', dtype='float32', mode='w+', shape=(1, max // step_size))
+    train_loss = np.memmap(f'PDBs/accuracies/train_loss/{node_name}', dtype='float32', mode='w+',
+                           shape=(1, max // step_size))
+    valid_loss = np.memmap(f'PDBs/accuracies/valid_loss/{node_name}', dtype='float32', mode='w+',
+                           shape=(1, max // step_size))
 
-    train_class = np.memmap(f'PDBs/accuracies/train_class/{node_name}', dtype='float32', mode='w+', shape=(2, max // step_size))
-    valid_class = np.memmap(f'PDBs/accuracies/valid_class/{node_name}', dtype='float32', mode='w+', shape=(2, max // step_size))
+    train_class = np.memmap(f'PDBs/accuracies/train_class/{node_name}', dtype='float32', mode='w+',
+                            shape=(2, max // step_size))
+    valid_class = np.memmap(f'PDBs/accuracies/valid_class/{node_name}', dtype='float32', mode='w+',
+                            shape=(2, max // step_size))
     # train_acc = np.zeros((9, max // step_size))
     # valid_acc = np.zeros((9, max // step_size))
 
-    seq_train = np.load('PDBs/big_data/tests/in-train.npy', mmap_mode='r', allow_pickle=True)
-    tar_train = np.load('PDBs/big_data/tests/out-train.npy', mmap_mode='r', allow_pickle=True)
+    seq_train = np.load('PDBs/big_data/in-train.npy', mmap_mode='r', allow_pickle=True)
+    tar_train = np.load('PDBs/big_data/out-train.npy', mmap_mode='r', allow_pickle=True)
 
     # seq_train = np.load('PDBs/big_data/tests/train_manual-in.npy', mmap_mode='r', allow_pickle=True)
     # tar_train = np.load('PDBs/big_data/tests/train_manual-out.npy', mmap_mode='r', allow_pickle=True)
@@ -818,8 +800,8 @@ if __name__ == '__main__':
     seq_train = seq_train[:1000 * 100]
     tar_train = tar_train[:1000 * 100, :]
 
-    seq_valid = np.load('PDBs/big_data/tests/in-valid.npy', mmap_mode='r', allow_pickle=True)
-    tar_valid = np.load('PDBs/big_data/tests/out-valid.npy', mmap_mode='r', allow_pickle=True)
+    seq_valid = np.load('PDBs/big_data/in-valid.npy', mmap_mode='r', allow_pickle=True)
+    tar_valid = np.load('PDBs/big_data/out-valid.npy', mmap_mode='r', allow_pickle=True)
 
     seq_valid = seq_valid[:1000 * 100]
     tar_valid = tar_valid[:1000 * 100, :]
@@ -865,61 +847,104 @@ if __name__ == '__main__':
     #
     # pause
 
+    r = RMSDLoss()
+    print(f'train acc: {train_acc.shape}')
+    for n in range(0, max, step_size):
+        print(f'n: {n}')
+        logging.info(f'- n {n} -')
+        torch.set_grad_enabled(False)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = open_model(f'models/{node_name}/Save-{i}')
+
+        # calculate accuracy for training and validation
+        tm_scores, losses, gdts_t, class_t = predict_codes(seq_train, tar_train, model)
+        avg_train = np.average(tm_scores)
+        avg_tLoss = np.average(losses)
+        # avg_tGDT = np.average(gdts_t)
+        avg_tClass = np.average(class_t, axis=0)
+
+        tm_scores, losses, gdts_v, class_v = predict_codes(seq_valid, tar_valid, model)
+        avg_valid = np.average(tm_scores)
+        avg_vLoss = np.average(losses)
+        # avg_vGDT = np.average(gdts_v)
+        avg_vClass = np.average(class_v, axis=0)
+
+        # calculate loss for training and validation
+
+        # print(f'avg train score: {avg_train}')
+        print(f'avg train score: {avg_train}')
+        print(f'avg valid score: {avg_valid}')
+
+        train_acc[0, i] = avg_train
+        valid_acc[0, i] = avg_valid
+
+        train_loss[0, i] = avg_tLoss
+        valid_loss[0, i] = avg_vLoss
+
+        train_class[:, i] = avg_tClass
+        valid_class[:, i] = avg_vClass
+
+        logging.info(f'Added all nodes for iter {n}')
+        print()
+        i += 1
+
+    # print(f'train accuracies: {train_acc}')
+    # print(f'valid accuracies: {valid_acc}')
+    np.save(f'PDBs/accuracies/train_acc/{node_name}', allow_pickle=True, arr=train_acc)
+    np.save(f'PDBs/accuracies/valid_acc/{node_name}', allow_pickle=True, arr=valid_acc)
+
+    np.save(f'PDBs/accuracies/train_loss/{node_name}', allow_pickle=True, arr=train_loss)
+    np.save(f'PDBs/accuracies/valid_loss/{node_name}', allow_pickle=True, arr=valid_loss)
+
+    np.save(f'PDBs/accuracies/train_class/{node_name}', allow_pickle=True, arr=train_class)
+    np.save(f'PDBs/accuracies/valid_class/{node_name}', allow_pickle=True, arr=valid_class)
 
 
 
-    # r = RMSDLoss()
-    # print(f'train acc: {train_acc.shape}')
-    # for n in range(0, max, step_size):
-    #     print(f'n: {n}')
-    #     logging.info(f'- n {n} -')
-    #     torch.set_grad_enabled(False)
-    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    #     model = open_model(f'models/{node_name}/Save-{i}')
-    #
-    #     # calculate accuracy for training and validation
-    #     tm_scores, losses, gdts_t, class_t = predict_codes(seq_train, tar_train, model)
-    #     avg_train = np.average(tm_scores)
-    #     avg_tLoss = np.average(losses)
-    #     # avg_tGDT = np.average(gdts_t)
-    #     avg_tClass = np.average(class_t, axis=0)
-    #
-    #     tm_scores, losses, gdts_v, class_v = predict_codes(seq_valid, tar_valid, model)
-    #     avg_valid = np.average(tm_scores)
-    #     avg_vLoss = np.average(losses)
-    #     # avg_vGDT = np.average(gdts_v)
-    #     avg_vClass = np.average(class_v, axis=0)
-    #
-    #     # calculate loss for training and validation
-    #
-    #
-    #     # print(f'avg train score: {avg_train}')
-    #     print(f'avg train score: {avg_train}')
-    #     print(f'avg valid score: {avg_valid}')
-    #
-    #     train_acc[0, i] = avg_train
-    #     valid_acc[0, i] = avg_valid
-    #
-    #     train_loss[0, i] = avg_tLoss
-    #     valid_loss[0, i] = avg_vLoss
-    #
-    #     train_class[:, i] = avg_tClass
-    #     valid_class[:, i] = avg_vClass
-    #
-    #     logging.info(f'Added all nodes for iter {n}')
-    #     print()
-    #     i += 1
-    #
-    # # print(f'train accuracies: {train_acc}')
-    # # print(f'valid accuracies: {valid_acc}')
-    # np.save(f'PDBs/accuracies/train_acc/{node_name}', allow_pickle=True, arr=train_acc)
-    # np.save(f'PDBs/accuracies/valid_acc/{node_name}', allow_pickle=True, arr=valid_acc)
-    #
-    # np.save(f'PDBs/accuracies/train_loss/{node_name}', allow_pickle=True, arr=train_loss)
-    # np.save(f'PDBs/accuracies/valid_loss/{node_name}', allow_pickle=True, arr=valid_loss)
-    #
-    # np.save(f'PDBs/accuracies/train_class/{node_name}', allow_pickle=True, arr=train_class)
-    # np.save(f'PDBs/accuracies/valid_class/{node_name}', allow_pickle=True, arr=valid_class)
+
+
+
+
+
+
+if __name__ == '__main__':
+    # Run eval_model on each node! Then copy over PDBs/accuracies to this file.
+    print(f'sys argv: {sys.argv}')
+    if len(sys.argv) > 1:
+        node_name = sys.argv[1]
+
+    else:
+        node_name = 'DH09T'
+
+    # ---------------------- Logging framework ----------------------
+    os.makedirs(f'Logs/{node_name}', exist_ok=True)
+    # 10MB handlers
+    file_handler = logging.handlers.RotatingFileHandler(f'Logs/{node_name}/Full_Log.log', maxBytes=10000000,
+                                                        backupCount=5)
+    file_handler.setLevel(logging.DEBUG)
+    # Starts each call as a new log!
+    file_handler.doRollover()
+
+    master_handler = logging.FileHandler(f'Logs/{node_name}/ERRORS.log', mode='w')
+    master_handler.setLevel(logging.WARNING)
+
+    logging.basicConfig(level=logging.DEBUG, handlers=[file_handler, master_handler],
+                        format='%(levelname)-8s: %(asctime)-22s %(module)-20s %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S | ')
+    logging.warning(f'starting with node: {node_name}')
+    logging.info(f'{sys.argv}')
+
+    print(f'Started with following system variables:')
+    print(f'{sys.argv}')
+    print(f'node_name: {node_name}')
+
+    # ---------------------- End Logging Framework ----------------------
+
+
+    compute_accuracies(node_name)
+
+
+
 
 
     # ----------------------------- Plot accuracies and losses
@@ -939,7 +964,7 @@ if __name__ == '__main__':
     #     i += 1
     #     name = f'DH0' + str(i) + 'A'
     #     plot_acc_loss(name)
-    plot_acc_loss('DH08A')
+    plot_acc_loss('DH09T')
     # plot_acc_loss('DH01A')
     # plt.show()
 
