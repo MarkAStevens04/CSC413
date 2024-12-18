@@ -524,7 +524,6 @@ class ProteinStructureDataset(Dataset):
         self.esm_batch_converter = None
         self.train_seq = train_seq
         self.train_tar = train_tar
-        self.block_size = block_size
 
         self.device = device
         self.traversed = 0
@@ -534,21 +533,6 @@ class ProteinStructureDataset(Dataset):
 
         logger.info(f'Training size: {num_training}')
 
-    # def set_batch_size(self, batch_size):
-    #     self.batch_size = batch_size
-    #     self.num_batches = self.num_training // self.batch_size
-    #     # print(f'self starts: {self.starts}')
-    #     self.update_batches()
-    #
-    # def update_batches(self):
-    #     self.random_seq = torch.randint(self.starts.shape[0], (self.starts.shape[0],))
-    #     # indices = np.linspace(0, self.starts.shape[0])
-    #     indices = np.arange(0, self.starts.shape[0], step=1)
-    #     np.random.shuffle(indices)
-    #     # print(f'indices: {indices}')
-    #     # print(f'batch size: {self.batch_size}')
-    #     self.batches = torch.split(torch.from_numpy(indices), self.batch_size)
-    #     # print(f'self.batches: {self.batches}')
 
     def __len__(self):
         return self.num_training
@@ -556,120 +540,23 @@ class ProteinStructureDataset(Dataset):
     def __iter__(self):
         return self
 
-    # def __next__(self):
-    #     if self.traversed >= self.num_batches:
-    #         self.update_batches()
-    #         self.traversed = 0
-    #         raise StopIteration
-    #     else:
-    #
-    #         # print(f'getting item...')
-    #         # print(f'code: {self.pdb_files[idx]}')
-    #         # pdb_path = f'PDBs/processed_data/train/{self.pdb_files[idx]}'
-    #         #
-    #         #
-    #         # # pdb_path = os.path.join(self.pdb_dir, self.pdb_files[idx])
-    #         # seq, coords = self.get_sequence_and_coords(pdb_path)
-    #         # seq = str(seq)
-    #         #
-    #         # # Obtain ESM embeddings for the raw sequence length
-    #         # batch = [("protein", seq)]
-    #         # _, _, tokens = self.esm_batch_converter(batch)
-    #         # tokens = tokens.to(next(self.esm_model.parameters()).device)
-    #         # with torch.no_grad():
-    #         #     results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
-    #         # # Exclude CLS token
-    #         # esm_emb = results["representations"][self.esm_model.num_layers][0, 1:len(seq)+1, :]
-    #         # # print(f'esm_emb shape: {esm_emb.shape}')
-    #         # # print(f'coords shape: {coords.shape}')
-    #         #
-    #         # # No padding/truncation here. Just return raw.
-    #
-    #
-    #
-    #         x, t = self.get_batch(self.train_seq, self.train_tar, self.block_size, self.batch_size, self.device, self.traversed)
-    #
-    #
-    #         # print(f'x prev shape: {x.shape}')
-    #
-    #         # print(f'x new shape: {x.shape}')
-    #         # print(f'train seq: {x.shape}')
-    #         # print(f'train tar: {t.shape}')
-    #         # print(f'num batches: {self.num_batches}')
-    #
-    #         self.traversed += 1
-    #
-    #
-    #         return x, t
 
     def __getitem__(self, idx):
+        """
+        Returns a tuple with our (embedding, target coordinates).
 
+        Our Dataloader calls this many times and is used by our custom collate function.
+        :param idx: index to pull from our training target!
+        :return:
+        """
         coords = torch.from_numpy((self.train_tar[idx:idx + block_size]))
         seq = torch.from_numpy((self.train_seq[idx:idx + block_size]))
         seq = seq[None, :]
-        # print(f'seq shape pre: {seq.shape}')
         esm_emb = self.to_embedding(seq)
-        # print(f'seq shape post: {seq.shape}')
 
 
         return esm_emb, coords
 
-    def get_batch(self, seq, tar, block_size, batch_size, device, traversed):
-        """
-            Return a minibatch of data. This function is not deterministic.
-            Calling this function multiple times will result in multiple different
-            return values.
-
-            Parameters:
-                `data` - a numpy array (e.g., created via a call to np.memmap)
-                `block_size` - the length of each sequence
-                `batch_size` - the number of sequences in the batch
-                `device` - the device to place the returned PyTorch tensor
-
-            Returns: A tuple of PyTorch tensors (x, t), where
-                `x` - represents the input tokens, with shape (batch_size, block_size)
-                `y` - represents the target output tokens, with shape (batch_size, block_size)
-            """
-        # print(f'possible start pos: {start_pos}')
-        # print(f'seq: {seq}')
-        # ix = torch.randint(seq.shape[0] - block_size, (batch_size,))
-        # starts = torch.randint(self.starts.shape[0], (self.batch_size,))
-        starts = self.batches[traversed]
-
-        # print(f'random seq: {starts}')
-        # starts = self.random_seq[(batch_size * traversed):(batch_size * (traversed + 1))]
-        # print(f'starts: {starts}')
-        # print(f'starts: {self.starts}')
-        # print(f'starts: {starts}')
-        ix = self.starts[starts]
-        # print(f'ix: {ix}')
-        # pick from a random start position!
-        # print(f'seq size: {seq.shape}')
-        x = torch.stack([torch.from_numpy((seq[i:i + block_size])) for i in ix])
-        t = torch.stack([torch.from_numpy((tar[i:i + block_size, :])) for i in ix])
-        # print(f'x: {x.shape}')
-        # print(f't: {t.shape}')
-        # print(f'ix: {ix}')
-        # print(f'x: {x[1, 100:110]}')
-        # for i in range(27):
-        #     # print(f'i {i}')
-        #     print(f't: {t[1, 107, (90 * i +82):(90 * i + 90)]}')
-            # print()
-        # print()
-        # print()
-
-        # print(f'tar shape: {tar.shape}')
-        # print(f't shape: {t[5, 50:55, 87]}')
-        # print(f'x batch shape: {x.shape}')
-        # print(f't batch shape: {t.shape}')
-        # print(f'device: {device}')
-        if device == 'cuda':
-            # pin arrays x,t, which allows us to move them to GPU asynchronously
-            #  (non_blocking=True)
-            x, t = x.pin_memory().to(device, non_blocking=True), t.pin_memory().to(device, non_blocking=True)
-        else:
-            x, t = x.to(device), t.to(device)
-        return x, t
 
 
 
@@ -942,7 +829,6 @@ def train_model(model,
     m = 0 #Tracks the save state of our model!
     # Create DataLoader
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=custom_collate_fn_two)
-    # dataset.set_batch_size(batch_size)
     model.train()
     model.to(device)
 
