@@ -1,16 +1,24 @@
 import logging
+import logging.handlers
 import os
 
 
 class ProteinLogFilter(logging.Filter):
+    """
+    Stores the name of the current protein code so it can easily be logged.
+    """
     def __init__(self):
         super().__init__()
         self.protein_code = '----'
 
-    def change_code(self, code):
-        self.protein_code = code
+    def change_protein_code(self, code):
+        self.protein_code = code.upper()
 
     def remove_code(self):
+        """
+        Makes protein code a default value
+        :return:
+        """
         self.protein_code = '----'
 
     def filter(self, record):
@@ -53,3 +61,11 @@ def setup_logger(node_name='DEFAULT'):
         logger.addFilter(protein_filter)
     return logger
 
+
+def get_logger():
+    """Retrieve the logger for modules."""
+    return logging.getLogger("protein_logger")
+
+
+def change_code(code='----'):
+    get_protein_filter(get_logger()).change_protein_code(code)

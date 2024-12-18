@@ -12,24 +12,19 @@ import random
 from torch.utils.data import DataLoader
 import torch
 import logging
-import logging.handlers
-from logging_setup import get_protein_filter, setup_logger
+from logging_setup import get_logger, setup_logger, change_code
 import time
 import parse_seq
 import sys
 # random.seed(777)
 
+# logger = get_logger()
+# logger.setLevel(logging.DEBUG)
+
 esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
 esm_batch_converter = esm_alphabet.get_batch_converter()
 
 block_size = 1000
-
-
-
-
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 
@@ -360,6 +355,7 @@ def process_data(max_proteins=1000):
     valid_codes = code_set[int(len(code_set) * 0.8):int(len(code_set) * 0.9)]
     test_codes = code_set[int(len(code_set) * 0.9):]
 
+    # Make all codes training codes
     # train_codes = code_set[:]
     # valid_codes = []
     # test_codes = []
@@ -367,6 +363,7 @@ def process_data(max_proteins=1000):
     # Saves processed data into proteins_cleaned under test, train, and valid
     pu = protein_unifier(len(train_codes), name='train')
     for i, code in enumerate(train_codes):
+        change_code(code)
         try:
             print(f'Saved one! {code} {round(((i / len(train_codes)) * 100), 2)}')
             given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)

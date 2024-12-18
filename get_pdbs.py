@@ -17,8 +17,9 @@ import logging.handlers
 from Bio.SeqUtils import seq1
 import re
 from Bio.PDB.mmcifio import MMCIFIO
+from logging_setup import get_logger, change_code
 
-logger = logging.getLogger(__name__)
+logger = get_logger()
 logger.setLevel(logging.DEBUG)
 
 

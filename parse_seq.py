@@ -4,12 +4,11 @@ import logging.handlers
 import amino_expert
 import numpy as np
 import time
-import os
-from logging_setup import get_protein_filter
+from logging_setup import get_logger, get_protein_filter
 
-logger = logging.getLogger(__name__)
+
+logger = get_logger()
 logger.setLevel(logging.DEBUG)
-protein_log = get_protein_filter()
 
 
 class Sequence_Parser():
@@ -69,7 +68,7 @@ class Sequence_Parser():
             # Process our list of aminos
             # amino has format [amino position, amino 1-letter abbrev, (atom1), (atom2), (atom3), ...]
             # where (atom) = (atom type, [atom x, atom y, atom z])
-            logging.debug(f'Parsing {code}...')
+            logger.debug(f'Parsing {code}...')
             given, target = self.process_aminos(ref_seq, pos_seq, n[3])
 
             # Check for our error signal
@@ -82,11 +81,11 @@ class Sequence_Parser():
                     np.save(f'{self.bin_dir}{code}-in', new_ref)
                     np.save(f'{self.bin_dir}{code}-target', target)
                     # print(f'target: {target[54:150, :]}')
-                    logging.info(f'Successfully parsed {code}!')
+                    logger.info(f'Successfully parsed {code}!')
                 else:
-                    logging.warning(f'len ref_seq * 27 != target.shape[0]! ')
-                    logging.warning(f'mismatch between actual & expected length')
-                    logging.error(f'Throwing away protein {code}')
+                    logger.warning(f'len ref_seq * 27 != target.shape[0]! ')
+                    logger.warning(f'mismatch between actual & expected length')
+                    logger.error(f'Throwing away protein {code}')
 
 
                 # print(f"modi ref seq: {new_ref}")
