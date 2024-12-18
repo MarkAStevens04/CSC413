@@ -2,6 +2,12 @@ import logging
 import logging.handlers
 import os
 
+# === Helpful tips and tricks when setting up logging! ===
+# - Make sure you're logging with logger.info(...), NOT logging.info(...). The latter will use the global logger, not ideal.
+# - Be careful with import statements. You set up the logger after you run Transformer.py, so when you first call your imports,
+#           your python scripts might not have a fully set up logger yet!
+
+
 
 class ProteinLogFilter(logging.Filter):
     """
@@ -32,6 +38,7 @@ def get_protein_filter(logger=None):
         if isinstance(f, ProteinLogFilter):
             return f
     return None
+
 
 # Set up a shared logger
 def setup_logger(node_name='DEFAULT'):
