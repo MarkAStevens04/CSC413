@@ -130,8 +130,6 @@ def normalize_target(target):
 
 
 
-
-
 class protein_unifier():
     """
     "Unifies" the proteins and appends into a single file.
@@ -142,6 +140,8 @@ class protein_unifier():
 
     """
     def __init__(self, num_looking, name='train'):
+        # Inform what set we're on
+        logger.debug(f'--- saving {name} set ---')
         # in & out files will be memmaps
         self.in_file = None
         self.out_file = None
@@ -156,6 +156,8 @@ class protein_unifier():
         """
         Turns an amino letter sequence into tokens for ESM embedding!
         Tokens are ints. First and final tokens are <BOS> and <EOS> tokens.
+
+        * IMPORTANT NOTE * This is case-sensitive!! BOS, EOS, and PAD are lowercase letters, while aminos are uppercase.
 
         :param sequence: String list of amino acid letters
         :return: Int array of tokenized sequence
@@ -183,6 +185,13 @@ class protein_unifier():
 
 
     def add_protein(self, sequence, protein):
+        """
+        Adds a protein to our memmap!
+
+        :param sequence: String of our 1-letter amino acid sequence.
+        :param protein: batch_size * 2430 array storing target protein
+        :return: None
+        """
 
         # Initialize our out_file if not already created
         if self.out_file is None:
@@ -205,8 +214,13 @@ class protein_unifier():
             # Add our sequence to its correct place in the array.
             self.in_file[(self.track) * sequence.shape[0]:(self.track + 1) * sequence.shape[0]] = sequence
 
+
         # update our iteration tracker
         self.track += 1
+
+        # Track our progress
+        progress = round(((self.track / self.num_looking) * 100), 2)
+        logger.debug(f'Saved one! {progress}')
 
         # Double check our protein shape and sequence shape are in agreement!
         if protein.shape[0] != sequence.shape[0]:
@@ -218,8 +232,8 @@ class protein_unifier():
     def save(self, name):
         """
         Save the memmaps as their own npy objects!
-        :param name:
-        :return:
+        :param name: Test/train/target. String that we want to call our numpy array.
+        :return: None
         """
         # No longer looking at a specific protein, remove protein code from logging
         change_log_code()
@@ -238,67 +252,62 @@ class protein_unifier():
 
 
 
-def format_sample(target, pad=False):
-    """ Formats a single sample (given, target)
+def stack_atoms(target):
+    """
+    Stacks 27-dimensional arrays into single long array.
+
+    Run this BEFORE running format_target!
+    :param target: Array for our protein. (N by 90) where N is the number of atoms. Should be a multiple of 27.
+    :return: Array for our protein. Shape is (n, 2430) = (N // 27, 90 * 27)
+    """
+    # Target.shape[0] must be multiple of 27.
+    if target.shape[0] % 27 != 0:
+        logging.warning(f'Invalid protein shape for stacking. {target.shape}')
+
+    # stack groups of 27 atoms into a single row!
+    N, M = target.shape
+    reshaped_target = target.reshape(N // 27, 27, M)  # Split into groups of 27 rows
+    stacked_target = reshaped_target.reshape(N // 27, M * 27)
+    return stacked_target
+
+
+def format_target(target):
+    """ Formats a single protein target label.
 
     Adds BOS & EOS rows to beginning of sequence and end of sequence.
     Rows are filled entirely with 0s except for the identifier.
     - BOS identifier is index 82
     - EOS identifier is index 83
     - PAD identifier is index 84
-    Add as many rows as necessary to make PAD correct sizing.
+    Add as many rows with PAD as necessary to make `target` correct sizing.
+
+    *NOTE* Size of proteins is block_size - 2! Block_size is final size, we add BOS & EOS.
     """
     sequence_length = block_size
 
-
+    # BOS and EOS row are added to stacked arrays.
     BOS_row = np.zeros(target.shape[1], dtype=int)
     EOS_row = np.zeros(target.shape[1], dtype=int)
     BOS_row[82] = 1
     EOS_row[83] = 1
 
-    if target.shape[0] > sequence_length:
-        print(f'uh oh! Possibly cutting off values')
-        print(f'target length: {target.shape[0]}')
-        print(f'max length: {sequence_length}')
-        logger.warning(f'uh oh! Possibly cutting off values')
-        logger.info(f'target length: {target.shape[0]}')
-        logger.info(f'max length: {sequence_length}')
-
-
+    # Add 2 because we're adding BOS and EOS rows!
+    # If the target isn't as long as our desired sequence length...
     if target.shape[0] + 2 < sequence_length:
+        # fill with padding.
         PAD = np.zeros((sequence_length - target.shape[0] - 2, target.shape[1]))
+        # Make sure our padding rows are flagged.
         PAD[:, 84] = 1
         # t is our new target
-        if pad:
-            t = np.vstack([BOS_row, target[:sequence_length - 2], PAD, EOS_row])
-        else:
-            t = np.vstack([BOS_row, target[:sequence_length - 2], PAD, EOS_row])
+        # Stack the BOS & EOS to the top and bottom of our target.
+        t = np.vstack([BOS_row, target[:sequence_length - 2], PAD, EOS_row])
     else:
         t = np.vstack([BOS_row, target[:sequence_length - 2], EOS_row])
 
     return t
 
 
-
-def stack_atoms(target):
-    """
-    Turns our 27-dimensional array into a stack!
-    Run this BEFORE running format_sample!
-    :param target:
-    :return:
-    """
-    # stack groups of 27 atoms into a single row!
-    N, M = target.shape
-    reshaped_target = target.reshape(N // 27, 27, M)  # Split into groups of 27 rows
-    stacked_target = reshaped_target.reshape(N // 27, M * 27)
-    # stacked_target = reshaped_target.transpose(0, 2, 1).reshape(N // 27, M * 27)
-    # print(f'stacked: {stacked_target.shape}')
-    return stacked_target
-
-
-
-
-def format_input(target, pad=False):
+def format_input(target):
     """ Formats a single sample (given, target)
 
     Adds BOS & EOS rows to beginning of sequence and end of sequence.
@@ -306,32 +315,27 @@ def format_input(target, pad=False):
     - BOS identifier is index 82
     - EOS identifier is index 83
     - PAD identifier is index 84
-    Add as many rows as necessary to make PAD correct sizing.
+    Add as many rows with PAD as necessary to make `target` correct sizing.
+
+    *NOTE* Size of sequence is block_size - 2! Block_size is final size, we add BOS & EOS.
     """
-    # MUST BE MULTIPLE OF 27! Each amino produces 27 atoms
     sequence_length = block_size
-    # smallest protein is 270, largest is 54102
-    # smallest is protein 6VU4
 
-    # index 1 will be BOS, index 25 will be EOS, index 23 will be PAD
-
+    # Use special case-sensitive letters to denote BOS, EOS, and PAD
     BOS = 'b'
     EOS = 'e'
     PAD = 'p'
 
+    # Make sure our target is uppercase so that our lowercase BOS, EOS, and PAD can be differentiated.
     target = str(target).upper()
+    # If our sequence is longer than our target length...
     if len(target) > sequence_length + 2:
-        logger.warning(f'UH OH!!! CUTTING OFF VALUES!')
-        logger.info(f'len target: {len(target)}')
-        logger.info(f'max size: {sequence_length}')
+        logger.warning(f'Sequence size exceeds batch size. Sequence size: {len(target)}')
 
     if len(target) + 2 < sequence_length:
         padding = PAD * (sequence_length - len(target) - 2)
         # t is our new target
-        if pad:
-            t = BOS + target[:sequence_length - 2] + padding + EOS
-        else:
-            t = BOS + target[:sequence_length - 2] + EOS
+        t = BOS + target[:sequence_length - 2] + padding + EOS
     else:
         t = BOS + target[:sequence_length - 2] + EOS
 
@@ -342,116 +346,121 @@ def format_input(target, pad=False):
 
 
 def process_data(max_proteins=1000):
+    """
+    Processes all proteins in the open_dir directory.
+
+    Saves these processed proteins to the save_dir.
+
+    Does NOT take these proteins as input so that we can perform pre-processing once and save our results.
+    :param max_proteins: Maximum number of proteins we will process. *NOTE* Random which proteins are ommitted (if any)
+    :return: None
+    """
+    # Where to obtain pre-processed proteins
     open_dir = 'PDBs/pre_processed_data'
+    # Where to save our post-processed proteins
     save_dir = 'PDBs/processed_data'
 
     os.makedirs(save_dir, exist_ok=True)
-    # os.makedirs(os.path.join(save_dir, 'train'), exist_ok=True)
-    # os.makedirs(os.path.join(save_dir, 'valid'), exist_ok=True)
-    # os.makedirs(os.path.join(save_dir, 'test'), exist_ok=True)
 
     # Get set of protein codes we have already pre-processed
     code_set = {name[:4] for name in os.listdir(open_dir)}
     code_set = list(code_set)
-    # randomize
+    # Shuffles code set in place.
     random.shuffle(code_set)
+    # cut off excess proteins
     code_set = code_set[:max_proteins]
-    print(f'all names: {code_set}')
+
+    logger.info(f'all names: {code_set}')
+
     # make our train-test split
     train_codes = code_set[:int(len(code_set) * 0.8)]
     valid_codes = code_set[int(len(code_set) * 0.8):int(len(code_set) * 0.9)]
     test_codes = code_set[int(len(code_set) * 0.9):]
 
-    # Make all codes training codes
-    # train_codes = code_set[:]
-    # valid_codes = []
-    # test_codes = []
 
-    # Saves processed data into proteins_cleaned under test, train, and valid
+
+    # Saves processed data into save_dir under test, train, and valid
+
     pu = protein_unifier(len(train_codes), name='train')
-    for i, code in enumerate(train_codes):
+    for code in train_codes:
+        # Change our logger to reflect the protein code
         change_log_code(code)
         try:
-            print(f'Saved one! {code} {round(((i / len(train_codes)) * 100), 2)}')
+            # Open our pre-processed data
             given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
             target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
 
-            # print(f'given: {given}')
-
             # process data
+            g = format_input(given)
+            # turn atom name into one-hot encoding...
             onehot_target = one_hot_encode_column(target, 0, 85)
+            # normalize our coordinates
             onehot_target = normalize_target(onehot_target)
-            # print(f'target shape: {onehot_target.shape}')
-            # target = format_sample(onehot_target)
-            #
-            #
-            # # save input-output pair
-            # np.save(os.path.join(save_dir, 'train', f'{code}-sample.npy'), given)
-            # np.save(os.path.join(save_dir, 'train', f'{code}-target.npy'), target)
-            # # print(f'given shape: {len(str(given))}')
-            # # print(f'target shape: {onehot_target.shape}')
-            g = format_input(given, pad=True)
-            t = stack_atoms(onehot_target)
-            t = format_sample(t, pad=True)
-            # print(f'given after formatting: {len(g)}')
-            # print(f'target after formatting: {t.shape}')
-            pu.add_protein(g, t)
-            # global num_training
-            # num_training += 1
+            # stack our atoms on top of each other
+            onehot_target = stack_atoms(onehot_target)
+            # Add padding to entire sequence
+            onehot_target = format_target(onehot_target)
+
+            pu.add_protein(g, onehot_target)
         except:
             logger.exception(f'FATAL ERROR WITH THIS PROTEIN! {code}')
-    # print(pu)
     pu.save('train')
 
+
+    # Move on to validation set
     pu = protein_unifier(len(valid_codes), name='valid')
     for code in valid_codes:
+        # Change our logger to reflect the protein code
         change_log_code(code)
-        given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
-        target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
+        try:
 
-        # print(f'code: {code}')
-        # print(f'given: {given}')
+            given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
+            target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
 
-        # process data
-        onehot_target = one_hot_encode_column(target, 0, 85)
-        onehot_target = normalize_target(onehot_target)
-        # target = format_sample(onehot_target)
-        #
-        # # save input-output pair
-        # np.save(os.path.join(save_dir, 'valid', f'{code}-sample.npy'), given)
-        # np.save(os.path.join(save_dir, 'valid', f'{code}-target.npy'), target)
-        g = format_input(given, pad=True)
-        t = stack_atoms(onehot_target)
-        t = format_sample(t, pad=True)
-        # print(f'given after formatting: {len(g)}')
-        # print(f'target after formatting: {t.shape}')
-        pu.add_protein(g, t)
-    # print(pu)
+            # process data
+            g = format_input(given)
+            # turn atom name into one-hot encoding...
+            onehot_target = one_hot_encode_column(target, 0, 85)
+            # normalize our coordinates
+            onehot_target = normalize_target(onehot_target)
+            # stack our atoms on top of each other
+            onehot_target = stack_atoms(onehot_target)
+            # Add padding to entire sequence
+            onehot_target = format_target(onehot_target)
+
+            pu.add_protein(g, onehot_target)
+        except:
+            logger.exception(f'FATAL ERROR WITH THIS PROTEIN! {code}')
+
     pu.save('valid')
 
+    # Move on to test set
     pu = protein_unifier(len(test_codes), name='test')
     for code in test_codes:
+        # Change our logger to reflect the protein code
         change_log_code(code)
-        given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
-        target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
+        try:
 
-        print(f'given: {given}')
+            given = np.load(f'{open_dir}/{code}-in.npy', mmap_mode='r', allow_pickle=True)
+            target = np.load(f'{open_dir}/{code}-target.npy', mmap_mode='r', allow_pickle=True)
 
-        # process data
-        onehot_target = one_hot_encode_column(target, 0, 85)
-        onehot_target = normalize_target(onehot_target)
-        # target = format_sample(onehot_target)
-        #
-        # # save input-output pair
-        # np.save(os.path.join(save_dir, 'test', f'{code}-sample.npy'), given)
-        # np.save(os.path.join(save_dir, 'test', f'{code}-target.npy'), target)
-        g = format_input(given, pad=True)
-        t = stack_atoms(onehot_target)
-        t = format_sample(t, pad=True)
-        # print(f'given after formatting: {len(g)}')
-        # print(f'target after formatting: {t.shape}')
-        pu.add_protein(g, t)
-    # print(pu)
+            print(f'given: {given}')
+
+            # process data
+            g = format_input(given)
+            # turn atom name into one-hot encoding...
+            onehot_target = one_hot_encode_column(target, 0, 85)
+            # normalize our coordinates
+            onehot_target = normalize_target(onehot_target)
+            # stack our atoms on top of each other
+            onehot_target = stack_atoms(onehot_target)
+            # Add padding to entire sequence
+            onehot_target = format_target(onehot_target)
+
+            pu.add_protein(g, onehot_target)
+        except:
+            logger.exception(f'FATAL ERROR WITH THIS PROTEIN! {code}')
+
     pu.save('test')
     change_log_code()
 
