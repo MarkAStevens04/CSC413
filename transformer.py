@@ -122,7 +122,7 @@ def normalize_target(target):
     centered_coords = coords.copy()
 
     # Subtract the mean only for valid coordinates
-    centered_coords[valid_mask, -5:-2] -= mean_defined[-5:-2]
+    centered_coords[valid_mask, :] -= mean_defined[:]
 
     # Create the centered array
     centered_array = np.hstack((target[:, :-5], centered_coords, target[:, -2:]))
@@ -917,7 +917,7 @@ def unstack(coords):
     N, M = coords.shape
     N = N * 27
     M = M // 27
-    
+
     coords = coords.detach().numpy()
     reshaped_parts = coords.reshape(N // 27, 27, M)
 
@@ -956,7 +956,7 @@ def process_sys_args(args):
         try:
             num_epochs = int(args[7])
         except:
-            num_epochs = 100
+            num_epochs = 10
 
     else:
         node_name = 'Default'
@@ -976,48 +976,12 @@ def process_sys_args(args):
 if __name__ == "__main__":
     # System arguments: Node name, reprocess, data size, num_heads, depth, batch_size, num_epochs!
     node_name, reprocess, data_size, num_heads, depth, batch_size, num_epochs = process_sys_args(sys.argv)
-    # if len(sys.argv) > 1:
-    #     node_name = sys.argv[1]
-    #     reprocess = sys.argv[2]
-    #     try:
-    #         data_size = int(sys.argv[3])
-    #     except:
-    #         data_size = 10
-    #     try:
-    #         num_heads = int(sys.argv[4])
-    #     except:
-    #         num_heads = 8
-    #
-    #     try:
-    #         depth = int(sys.argv[5])
-    #     except:
-    #         depth = 4
-    #
-    #     try:
-    #         batch_size = int(sys.argv[6])
-    #     except:
-    #         batch_size = 10
-    #
-    #     try:
-    #         num_epochs = int(sys.argv[7])
-    #     except:
-    #         num_epochs = 100
-    #
-    # else:
-    #     node_name = 'Default'
-    #     reprocess = 't'
-    #     data_size = 10
-    #     num_heads = 8
-    #     depth = 4
-    #     batch_size = 10
-    #     num_epochs = 100
 
+    # Do our setup
     setup(node_name=node_name)
     logger = setup_logger(node_name=node_name)
 
-    # logger.addFilter(protein_log)
-
-
+    # Note run info for our logger
     logger.info(f'Started with following system variables:')
     logger.info(f'{sys.argv}')
     logger.info(f'node_name:  {node_name}')
@@ -1033,10 +997,7 @@ if __name__ == "__main__":
     print(f'num_heads: {num_heads}')
     print(f'depth:     {depth}')
 
-    # ---------------------- End Logging Framework ----------------------
-
-
-
+    # Track our experiment number
     experiment_number = 0
     f = open('trial_tracker.txt', 'r+')
     attempt_num = int(f.readline())
@@ -1046,19 +1007,17 @@ if __name__ == "__main__":
     f.close()
 
 
-
+    # Parse sequences if we're asked to
     start = time.time()
     if reprocess.lower() == 't':
         logger.info(f'------------------------- Beginning Parsing Sequences ------------------------- ')
         a = parse_seq.Sequence_Parser(max_samples=data_size)
-        # a.parse_names(['6XTB'])
         print(a.e.encode)
         a.RAM_Efficient_parsing(batch_size=10)
-        # a.open_struct('6XTB')
 
-        # logging.info(f'Took {time.time() - start} seconds!!!')
+
         logger.info(f'Complete! Took {time.time() - start} seconds!!!')
-
+        # Process data if we're asked to
         logger.info('--------------------------------- Begin Processing Data ---------------------------------------- ')
 
         process_data(max_proteins=data_size)
@@ -1066,74 +1025,47 @@ if __name__ == "__main__":
     logger.info('--------------------------------- Begin Transformer ---------------------------------------- ')
     output_len = 2430
 
+    # Load our processed training and target sequences
     train_seq = np.load('PDBs/big_data/in-train.npy', mmap_mode='r', allow_pickle=True)
     train_tar = np.load('PDBs/big_data/out-train.npy', mmap_mode='r', allow_pickle=True)
 
-    print(f'train_seq: {train_seq.shape}')
-
-
+    # Load ESM-Fold for creating our embeddings
     esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
     esm_batch_converter = esm_alphabet.get_batch_converter()
     esm_model.eval()
+
+    # Send model to graphics card
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     esm_model = esm_model.to(device)
 
+    # Initialize our model and dataset
     dataset = ProteinStructureDataset(esm_model, esm_batch_converter, train_seq, train_tar, device, num_training=int(data_size * 0.8))
     model = ProteinStructurePredictor(embed_dim=esm_model.embed_dim, depth=depth, num_heads=num_heads, mlp_ratio=4.0)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     criterion = RMSDLoss()
 
-    # # seq = 'N'
-    # seq = 'AFLAAAYGA'
-    # # AFLAAAYGA
-    # # tokens: tensor([[ 0,  5, 18,  4,  5,  5,  5, 19,  6,  5,  2]])
-    # # N
-    # # tokens: tokens: tensor([[ 0, 17,  2]])
-    #
-    # a = [ord(n) - 60 for n in seq]
-    # print(a)
-    #
-    # batch = [("protein", seq)]
-    # _, _, tokens = esm_batch_converter(batch)
-    # print(f'tokens: {tokens}')
-    #
-    # tokens = tokens.to(next(esm_model.parameters()).device)
-    # with torch.no_grad():
-    #     results = esm_model(tokens, repr_layers=[esm_model.num_layers])
-    # # Exclude CLS token
-    # esm_emb_b = results["representations"][esm_model.num_layers][0, 1:len(seq) + 1, :]
-
-
-
-
-    # train_seq = np.memmap('PDBs/big_data/in-train.bin')
-    # train_tar = np.memmap('PDBs/big_data/out-train.bin', shape=(-1, 2430))
-
-    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    #
-    # print(f'seq shape: {train_seq.shape}')
-    # print(f'tar shape: {train_tar.shape}')
-    #
-    # x, t = get_batch(train_seq, train_tar, 100, 3, device)
-    #
-    # dataset.to_embedding(x)
-
+    # CUDA info
+    logger.info(f'- cuda info -')
+    logger.info(f'cuda available? {torch.cuda.is_available()}')
+    logger.info(f'torch version: {torch.version.cuda}')
+    logger.info(f'torch device: {device}')
     print(f'cuda available? {torch.cuda.is_available()}')
     print(f'torch version: {torch.version.cuda}')
     print(f'torch device: {device}')
 
-
-
+    # Train our model!!
     train_model(model, dataset, criterion, optimizer, epochs=num_epochs, batch_size=batch_size, shuffle=True, device=device,
                 print_interval=50, save_after=100, save_loc=f'models/{node_name}/Save')
 
+
+    # --------------------------------------------------------------------------------------------------------------------------------
     # Run a single example to evaluate our predictions!
     # Just make sure it produces something reasonable.
-    # dataloader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=custom_collate_fn)
     model.eval()
     model.to(device)
 
+    # Pull out a single example
     dataloader = DataLoader(dataset, batch_size=10, shuffle=True, collate_fn=custom_collate_fn_two)
     for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
         coords_true = coords_true.to(device)
@@ -1141,7 +1073,7 @@ if __name__ == "__main__":
         coords_pred = model(seq_emb)
         break
 
-    print(f'seq_emb: {seq_emb.shape}')
+
 
     # seq_emb = seq_emb.to(device)  # [B, L, D]
     #             coords_true = coords_true.to(device)  # [B, L, 3]
@@ -1183,8 +1115,12 @@ if __name__ == "__main__":
     #     print(f'pred: {p}')
     #     print()
 
+    print(f'unstacked shape: {unstacked_true.shape}')
+    # unstacked has shape (sequence_length, atoms, atom dimensions)
+
     for i in range(5):
-        for t, p in zip(unstacked_true[i, :, -5:], unstacked_pred[i, :, -5:]):
+        # do 50 + i to get to the interesting amino acids
+        for t, p in zip(unstacked_true[50 + i, :, -5:], unstacked_pred[50+i, :, -5:]):
             print(f'true: {t}')
             print(f'pred: {p}')
             print()
