@@ -738,10 +738,19 @@ class RMSDLoss(nn.Module):
 
     def forward(self, pred_coords, true_coords):
         # Create a mask to ignore padded regions
-        mask = (true_coords.sum(dim=-1) != 0)  # Assuming padded coords are all zeros
+        # mask = (true_coords.sum(dim=-1) != 0)  # Assuming padded coords are all zeros
+        # mask_two = (true_coords[:, :, 83] != 0)
+        mask = (true_coords[:, :, 83] != 0)
         # print(f'mask shape: {mask.shape}')
-        # mask shape: torch.Size([10, 1000])
+        # # mask shape: torch.Size([10, 1000])
         # print(f'mask: {mask}')
+        # print(f'mask_two: {mask_two}')
+        # print(f'mask_two shape: {mask_two.shape}')
+        # print(f'true coords shape: {true_coords.shape}')
+        # false_indices = torch.where(mask_two == False)[1]
+        #
+        # print(false_indices[840:900])
+        # print(f'false indices shape: {false_indices.shape}')
 
         # torch.Size([2, 463, 2430])
         # pred_coords has size (batch, block, output)
