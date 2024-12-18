@@ -30,7 +30,6 @@ logger.setLevel(logging.DEBUG)
 
 
 def setup(node_name=None):
-    # logger.info(f'Setting up...')
     os.makedirs(f'PDBs', exist_ok=True)
     os.makedirs(f'PDBs/all', exist_ok=True)
     os.makedirs(f'PDBs/big_data', exist_ok=True)
