@@ -220,7 +220,7 @@ class protein_unifier():
 
         # Track our progress
         progress = round(((self.track / self.num_looking) * 100), 2)
-        logger.debug(f'Saved one! {progress}')
+        logger.debug(f'Successfully Processed! {progress}')
 
         # Double check our protein shape and sequence shape are in agreement!
         if protein.shape[0] != sequence.shape[0]:
@@ -482,128 +482,26 @@ def positional_encoding(length, dim, device):
 
 
 
-def custom_collate_fn(batch):
-    """
-    Collate function to handle variable-length (esm_emb, coords) pairs.
-    Each item in batch is (esm_emb, coords) with shape [L, D] and [L, 3], respectively.
-
-    Steps:
-    1. Find max_length across all samples in the batch.
-    2. Pad all embeddings and coords to this max_length.
-    3. Stack them along the batch dimension.
-    """
-    # ******************* Extend this by adding your own stacking function!!! *******************
-    # So first stack all atoms from all amino acids for all proteins.
-    # Then, add BOS & EOS identifiers.
-    # Then stack all proteins on each other.
-    # Then, save this super stack as a single file.
-    # Finally, load memory maps from this super stack.
-
-    # batch: list of (esm_emb, coords)
-    # esm_emb: [L, D], coords: [L, output_len (27 atoms stacked horizontally)]
-    # sets the block size to actually be max_length?
-    block_size = 570
-
-    lengths = [item[0].size(0) for item in batch]  # lengths of each sequence
-    max_length = max(lengths)
-
-    # Determine embedding dimension (D) from the first sample
-    D = batch[0][0].size(-1)
-
-    # Prepare padded tensors
-    # We'll pad with zeros for both embeddings and coords
-    # After padding:
-    # esm_emb_padded: [B, max_length, D]
-    # coords_padded: [B, max_length, 3]
-    B = len(batch)
-
-    esm_emb_padded = torch.zeros(B, max_length, D)
-    coords_padded = torch.zeros(B, max_length, output_len)
-
-    for i, (esm_emb, coords) in enumerate(batch):
-        # print(f'esm_emb shape: {esm_emb.shape}')
-        # print(f'coords shape: {coords.shape}')
-        L = esm_emb.size(0)
-        esm_emb_padded[i, :L, :] = esm_emb
-        coords_padded[i, :L, :] = torch.from_numpy(coords)
-    return esm_emb_padded, coords_padded
-
-
-
-
-
-
 
 def custom_collate_fn_two(batch):
     """
-    Collate function to handle variable-length (esm_emb, coords) pairs.
-    Each item in batch is (esm_emb, coords) with shape [L, D] and [L, 3], respectively.
+    Converts batch with list of (embedding, coordinate) pairs into valid batch tensor with shape (B, L, D)
+    B is batch size
+    L is block size (sequence length)
+    D is embedding size (320 for esm embedding)
 
-    Steps:
-    1. Find max_length across all samples in the batch.
-    2. Pad all embeddings and coords to this max_length.
-    3. Stack them along the batch dimension.
     """
-    # ******************* Extend this by adding your own stacking function!!! *******************
-    # So first stack all atoms from all amino acids for all proteins.
-    # Then, add BOS & EOS identifiers.
-    # Then stack all proteins on each other.
-    # Then, save this super stack as a single file.
-    # Finally, load memory maps from this super stack.
 
-
-    # print(f'batch[0]: {batch[0]}')
+    # pick arbitrary batch element and use shape of embedding
+    # then use same  batch element and use shape of target
     x = torch.zeros(len(batch), batch[0][0].shape[1], batch[0][0].shape[2])
     t = torch.zeros(len(batch), batch[0][1].shape[0], batch[0][1].shape[1])
-    # print(f'x shape: {x.shape}')
-    # print(f't shape: {t.shape}')
 
+    # pack each element in our batch into a single tensor
     for i, (esm_emb, coords) in enumerate(batch):
-        # print(f'coords: {coords.shape}')
-        # print(f'esm_emb: {esm_emb.shape}')
         x[i, :, :] = esm_emb
         t[i, :, :] = coords
 
-    if device == 'cuda':
-        # pin arrays x,t, which allows us to move them to GPU asynchronously
-        #  (non_blocking=True)
-        x, t = x.pin_memory().to(device, non_blocking=True), t.pin_memory().to(device, non_blocking=True)
-    else:
-        x, t = x.to(device), t.to(device)
-    return x, t
-
-
-
-
-
-
-
-
-
-
-
-def get_batch(seq, tar, block_size, batch_size, device):
-    """
-        Return a minibatch of data. This function is not deterministic.
-        Calling this function multiple times will result in multiple different
-        return values.
-
-        Parameters:
-            `data` - a numpy array (e.g., created via a call to np.memmap)
-            `block_size` - the length of each sequence
-            `batch_size` - the number of sequences in the batch
-            `device` - the device to place the returned PyTorch tensor
-
-        Returns: A tuple of PyTorch tensors (x, t), where
-            `x` - represents the input tokens, with shape (batch_size, block_size)
-            `y` - represents the target output tokens, with shape (batch_size, block_size)
-        """
-
-    ix = torch.randint(seq.shape[0] - block_size, (batch_size,))
-    x = torch.stack([torch.from_numpy((seq[i:i + block_size])) for i in ix])
-    t = torch.stack([torch.from_numpy((tar[i:i + block_size, :])) for i in ix])
-    # print(f'x batch shape: {x.shape}')
-    # print(f't batch shape: {t.shape}')
 
     if device == 'cuda':
         # pin arrays x,t, which allows us to move them to GPU asynchronously
@@ -616,17 +514,13 @@ def get_batch(seq, tar, block_size, batch_size, device):
 
 
 
-
-
-
-# Example usage:
-# Adjust your dataset so that it no longer pads/truncates sequences.
-# Return raw esm_emb and coords at their natural length.
 class ProteinStructureDataset(Dataset):
-    def __init__(self, pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device, num_training):
-        self.pdb_dir = pdb_dir
+    """
+    Handles our dataset!
+    """
+    def __init__(self, esm_model, train_seq, train_tar, device, num_training):
+        # ESM model gets us our embeddings from our tokenized sequence
         self.esm_model = esm_model
-        self.esm_batch_converter = esm_batch_converter
         self.train_seq = train_seq
         self.train_tar = train_tar
         self.block_size = block_size
@@ -637,7 +531,7 @@ class ProteinStructureDataset(Dataset):
         self.starts = np.where(self.train_seq == 0)[0]
         self.num_training = num_training
 
-        print(f'num training: {num_training}')
+        logger.info(f'Training size: {num_training}')
 
     def set_batch_size(self, batch_size):
         self.batch_size = batch_size
@@ -1210,13 +1104,12 @@ if __name__ == "__main__":
 
 
     esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
-    esm_batch_converter = esm_alphabet.get_batch_converter()
+    # esm_batch_converter = esm_alphabet.get_batch_converter()
     esm_model.eval()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     esm_model = esm_model.to(device)
 
-    pdb_dir = "path_to_pdbs"
-    dataset = ProteinStructureDataset(pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device, num_training=int(data_size * 0.8))
+    dataset = ProteinStructureDataset(esm_model, train_seq, train_tar, device, num_training=int(data_size * 0.8))
     model = ProteinStructurePredictor(embed_dim=esm_model.embed_dim, depth=depth, num_heads=num_heads, mlp_ratio=4.0)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
