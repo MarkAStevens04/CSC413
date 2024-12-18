@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 import torch
 import logging
 import logging.handlers
+import multiprocessing_logging
 import time
 import parse_seq
 import sys
@@ -29,11 +30,17 @@ logger.setLevel(logging.DEBUG)
 
 
 def setup(node_name=None):
-    logging.info(f'Setting up...')
+    # logger.info(f'Setting up...')
     os.makedirs(f'PDBs', exist_ok=True)
     os.makedirs(f'PDBs/all', exist_ok=True)
-    os.makedirs(f'PDBs/big_data/tests', exist_ok=True)
+    os.makedirs(f'PDBs/big_data', exist_ok=True)
     os.makedirs(f'PDBs/pre_processed_data', exist_ok=True)
+    os.makedirs(f'PDBs/Residues', exist_ok=True)
+
+    # Download standard aminos if not already downloaded
+    if len([name for name in os.listdir('PDBs/Residues')]) == 0:
+        import amino_expert
+        amino_expert.download_all_aminos()
 
 
     if node_name is not None:
@@ -44,6 +51,15 @@ def setup(node_name=None):
     else:
         os.makedirs(f'models', exist_ok=True)
         os.makedirs(f'Logs', exist_ok=True)
+
+    # Make a trial_tracker to keep our model numbers from conflicting
+    try:
+        with open(f'trial_tracker.txt', 'x') as file:
+            file.write(f'0')
+    except FileExistsError:
+        # File has already been created
+        pass
+
 
 
 
@@ -129,7 +145,7 @@ class protein_unifier():
     def __init__(self, num_looking, name='train'):
         self.in_file = None
         self.out_file = None
-        self.save_path = 'PDBs/big_data/tests/'
+        self.save_path = 'PDBs/big_data/'
         self.num_looking = num_looking
         self.track = 0
         self.chunk_size = 10
@@ -239,9 +255,9 @@ def format_sample(target, pad=False):
         print(f'uh oh! Possibly cutting off values')
         print(f'target length: {target.shape[0]}')
         print(f'max length: {sequence_length}')
-        logging.warning(f'uh oh! Possibly cutting off values')
-        logging.info(f'target length: {target.shape[0]}')
-        logging.info(f'max length: {sequence_length}')
+        logger.warning(f'uh oh! Possibly cutting off values')
+        logger.info(f'target length: {target.shape[0]}')
+        logger.info(f'max length: {sequence_length}')
 
 
     if target.shape[0] + 2 < sequence_length:
@@ -300,9 +316,9 @@ def format_input(target, pad=False):
 
     target = str(target).upper()
     if len(target) > sequence_length + 2:
-        logging.warning(f'UH OH!!! CUTTING OFF VALUES!')
-        logging.info(f'len target: {len(target)}')
-        logging.info(f'max size: {sequence_length}')
+        logger.warning(f'UH OH!!! CUTTING OFF VALUES!')
+        logger.info(f'len target: {len(target)}')
+        logger.info(f'max size: {sequence_length}')
 
     if len(target) + 2 < sequence_length:
         padding = PAD * (sequence_length - len(target) - 2)
@@ -759,7 +775,7 @@ class ProteinStructureDataset(Dataset):
             results = self.esm_model(tokens, repr_layers=[self.esm_model.num_layers])
         esm_emb = results["representations"][self.esm_model.num_layers]
         # print(f'embedded! {esm_emb.shape}')
-        print(f'embedding shape: {esm_emb.shape}')
+        # print(f'embedding shape: {esm_emb.shape}')
         return esm_emb
 
 
@@ -1049,8 +1065,8 @@ def train_model(model,
 
             # Print loss & save model at given intervals
             if iteration % save_after == 0:
-                logging.info(f'saved model {m}')
-                logging.info(f'Epoch {epoch+1}/{epochs}, Iteration {iteration}, Loss: {loss.item():.4f}')
+                logger.info(f'saved model {m}')
+                logger.info(f'Epoch {epoch+1}/{epochs}, Iteration {iteration}, Loss: {loss.item():.4f}')
                 torch.save(model, f'{save_loc}-{m}')
                 m += 1
             if iteration % print_interval == 0:
@@ -1088,77 +1104,6 @@ def unstack(coords):
 
 
 
-def open_model(model_dir):
-    model = torch.load(model_dir, weights_only=False)
-    return model
-
-
-def predict_codes(in_dir, out_dir, model):
-    """
-    Manually return prediction from directories of processed protein files
-
-    Takes a directory of in and out files, returns predictions of those files
-    :param in_dir:
-    :param out_dir:
-    :return:
-    """
-    model.eval()
-    seq = np.load(in_dir, mmap_mode='r', allow_pickle=True)
-    tar = np.load(out_dir, mmap_mode='r', allow_pickle=True)
-    # 'PDBs/big_data/tests/in-train.npy'
-    # 'PDBs/big_data/tests/out-train.npy'
-
-
-    esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
-    esm_batch_converter = esm_alphabet.get_batch_converter()
-    esm_model.eval()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
-    esm_model = esm_model.to(device)
-
-    pdb_dir = "UNUSED_WILL_REMOVE"
-    dataset = ProteinStructureDataset(pdb_dir, esm_model, esm_batch_converter, train_seq, train_tar, device,
-                                      num_training=int(data_size * 0.8))
-    DataLoader(dataset, batch_size=10, shuffle=True, collate_fn=custom_collate_fn_two)
-
-    coords_pred = torch.zeros((tar.shape))
-
-    for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
-        coords_true = coords_true.to(device)
-        seq_emb = seq_emb.to(device)
-        print(f'coords pred shape: {coords_pred.shape}')
-        coords_pred[batch_idx] = model(seq_emb)
-        # break
-    print(f'seq_emb: {seq_emb.shape}')
-    # Display the result of our single prediction
-    # print(f'coords true: {coords_true}')
-    print(f'original shape: {coords_true.shape}')
-    print(f'original pred shape: {coords_pred.shape}')
-
-    print(f'selection: {coords_true[0, 50:55, 87]}')
-
-    ct_cpu = coords_true.to('cpu')[0]
-    cp_cpu = coords_pred.to('cpu')[0]
-
-    # ct_cpu = coords_true.cpu()
-    # cp_cpu = coords_pred.cpu()
-
-    unstacked_true = unstack(ct_cpu)
-    unstacked_pred = unstack(cp_cpu)
-    print(f'final shape     : {unstacked_true.shape}')
-    print(f'prediction shape: {unstacked_pred.shape}')
-    for i in range(5):
-        for t, p in zip(unstacked_true[i, :, -5:], unstacked_pred[i, :, -5:]):
-            print(f'true: {t}')
-            print(f'pred: {p}')
-            print()
-        print()
-
-
-
-
-
-
 
 
 
@@ -1166,7 +1111,6 @@ def predict_codes(in_dir, out_dir, model):
 
 if __name__ == "__main__":
     # System arguments: Node name, reprocess, data size, num_heads, depth!
-    print(f'sys argv: {sys.argv}')
     if len(sys.argv) > 1:
         node_name = sys.argv[1]
         reprocess = sys.argv[2]
@@ -1200,25 +1144,26 @@ if __name__ == "__main__":
     file_handler.doRollover()
 
     master_handler = logging.FileHandler(f'Logs/{node_name}/ERRORS.log', mode='w')
-    master_handler.setLevel(logging.ERROR)
+    master_handler.setLevel(logging.WARNING)
 
-    logging.basicConfig(level=logging.DEBUG, handlers=[file_handler, master_handler],
+    logging.basicConfig(level=logging.DEBUG, handlers=[master_handler, file_handler],
                         format='%(levelname)-8s: %(asctime)-22s %(module)-20s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S | ')
 
-    logging.info(f'Started with following system variables:')
-    logging.info(f'{sys.argv}')
-    logging.info(f'node_name: {node_name}')
-    logging.info(f'reprocess: {reprocess}')
-    logging.info(f'num_heads: {num_heads}')
-    logging.info(f'depth: {depth}')
+    multiprocessing_logging.install_mp_handler()
 
-    print(f'Started with following system variables:')
-    print(f'{sys.argv}')
+    logger.info(f'Started with following system variables:')
+    logger.info(f'{sys.argv}')
+    logger.info(f'node_name: {node_name}')
+    logger.info(f'reprocess: {reprocess}')
+    logger.info(f'num_heads: {num_heads}')
+    logger.info(f'depth: {depth}')
+
+
     print(f'node_name: {node_name}')
     print(f'reprocess: {reprocess}')
     print(f'num_heads: {num_heads}')
-    print(f'depth: {depth}')
+    print(f'depth:     {depth}')
 
     # ---------------------- End Logging Framework ----------------------
 
@@ -1236,7 +1181,7 @@ if __name__ == "__main__":
 
     start = time.time()
     if reprocess.lower() == 't':
-        logging.warning(f' ------------------------- Beginning Parsing Sequences ------------------------- ')
+        logger.warning(f' ------------------------- Beginning Parsing Sequences ------------------------- ')
         a = parse_seq.Sequence_Parser(max_samples=data_size)
         # a.parse_names(['6XTB'])
         print(a.e.encode)
@@ -1244,7 +1189,7 @@ if __name__ == "__main__":
         # a.open_struct('6XTB')
 
         # logging.info(f'Took {time.time() - start} seconds!!!')
-        logging.warning(f'Complete! Took {time.time() - start} seconds!!!')
+        logger.warning(f'Complete! Took {time.time() - start} seconds!!!')
 
         logger.warning(' --------------------------------- Begin Processing Data ---------------------------------------- ')
 
@@ -1253,8 +1198,8 @@ if __name__ == "__main__":
     logger.warning(' --------------------------------- Begin Transformer ---------------------------------------- ')
     output_len = 2430
 
-    train_seq = np.load('PDBs/big_data/tests/in-train.npy', mmap_mode='r', allow_pickle=True)
-    train_tar = np.load('PDBs/big_data/tests/out-train.npy', mmap_mode='r', allow_pickle=True)
+    train_seq = np.load('PDBs/big_data/in-train.npy', mmap_mode='r', allow_pickle=True)
+    train_tar = np.load('PDBs/big_data/out-train.npy', mmap_mode='r', allow_pickle=True)
 
     print(f'train_seq: {train_seq.shape}')
 
@@ -1379,51 +1324,11 @@ if __name__ == "__main__":
         print()
 
 
-    logging.info(f'Complete!!! Took {time.time() - start} seconds!!')
+    logger.info(f'Complete!!! Took {time.time() - start} seconds!!')
     torch.save(model, f'models/model-FINISHED-{node_name}-{attempt_num}')
-    logging.info(f'Saved model successfully!')
+    logger.info(f'Saved model successfully!')
 
     print(f'----------------------------------------------------------------------------------------------')
-    # # Protein codes that work well: ['6jux', '6zgc']
-    # model_loaded = torch.load(f'models/downloads/Save-1030', weights_only=False)
-    # dataloader = DataLoader(dataset, batch_size=20, shuffle=True, collate_fn=custom_collate_fn_two)
-    # seq_emb = dataset[2]
-    # print(f'seq emb: {seq_emb[0].shape}, {seq_emb[1].shape}')
-    # model_loaded.eval()
-    # for batch_idx, (seq_emb, coords_true) in enumerate(dataloader):
-    #     coords_true = coords_true.to(device)
-    #     seq_emb = seq_emb.to(device)
-    #     coords_pred = model_loaded(seq_emb)
-    #     break
-    # print(f'seq_emb: {seq_emb.shape}')
-    # # Display the result of our single prediction
-    # # print(f'coords true: {coords_true}')
-    # print(f'original shape: {coords_true.shape}')
-    # print(f'original pred shape: {coords_pred.shape}')
-    #
-    # print(f'selection: {coords_true[0, 50:55, 87]}')
-    #
-    # ct_cpu = coords_true.to('cpu')[0]
-    # cp_cpu = coords_pred.to('cpu')[0]
-    #
-    # # ct_cpu = coords_true.cpu()
-    # # cp_cpu = coords_pred.cpu()
-    #
-    # unstacked_true = unstack(ct_cpu)
-    # unstacked_pred = unstack(cp_cpu)
-    # print(f'final shape     : {unstacked_true.shape}')
-    # print(f'prediction shape: {unstacked_pred.shape}')
-    # for i in range(5):
-    #     for t, p in zip(unstacked_true[i, :, -5:], unstacked_pred[i, :, -5:]):
-    #         print(f'true: {t}')
-    #         print(f'pred: {p}')
-    #         print()
-    #     print()
-
-    model = open_model(f'models/downloads/Save-1030')
-    predict_codes('PDBs/big_data/tests/in-train.npy', 'PDBs/big_data/tests/out-train.npy', model)
-    # 'PDBs/big_data/tests/in-train.npy'
-    #  'PDBs/big_data/tests/out-train.npy'
 
 
 
@@ -1440,5 +1345,3 @@ if __name__ == "__main__":
     #   return hook
 
 
-
-    # System arguments: Node name, reprocess, data size!
