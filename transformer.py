@@ -18,8 +18,6 @@ import parse_seq
 import sys
 # random.seed(777)
 
-# logger = get_logger()
-# logger.setLevel(logging.DEBUG)
 
 esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
 esm_batch_converter = esm_alphabet.get_batch_converter()
@@ -29,6 +27,11 @@ block_size = 1000
 
 
 def setup(node_name=None):
+    """
+    Creates directories to store all files
+    :param node_name:
+    :return:
+    """
     os.makedirs(f'PDBs', exist_ok=True)
     os.makedirs(f'PDBs/all', exist_ok=True)
     os.makedirs(f'PDBs/big_data', exist_ok=True)
@@ -57,15 +60,6 @@ def setup(node_name=None):
     except FileExistsError:
         # File has already been created
         pass
-
-
-
-
-
-
-
-
-
 
 
 
@@ -109,6 +103,8 @@ def normalize_target(target):
     Only takes mean from valid coordinates (final two flags are both true)
     Only updates valid coordinates (leaves 0-fills and -1-fills)
 
+    DOES NOT re-scale.
+
     """
     flags = target[:, -2:]  # Extract the flags
     coords = target[:, -5:-2]  # Extract the coordinates
@@ -138,34 +134,32 @@ def normalize_target(target):
 
 class protein_unifier():
     """
-    "Unifies" the proteins and appends into a single file
+    "Unifies" the proteins and appends into a single file.
+    Stacks proteins on top of each other onto a single array.
+
+    Stores array in storage with a memmap to avoid excess memory usage. Allows very large datasets
+    with many proteins, because dataset is NOT held in memory!
+
     """
     def __init__(self, num_looking, name='train'):
+        # in & out files will be memmaps
         self.in_file = None
         self.out_file = None
         self.save_path = 'PDBs/big_data/'
+        # num_looking helps us initialize our array in storage to be the correct size.
         self.num_looking = num_looking
+        # tracks the current protein number. Helps us know where in our array to update.
         self.track = 0
-        self.chunk_size = 10
         self.name = name
 
-    def add_protein(self, sequence, protein):
+    def tokenize(self, sequence):
+        """
+        Turns an amino letter sequence into tokens for ESM embedding!
+        Tokens are ints. First and final tokens are <BOS> and <EOS> tokens.
 
-        if self.out_file is None:
-            # self.out_file = np.zeros((protein.shape[0] * self.num_looking, protein.shape[1]))
-            # self.out_file = np.save(, allow_pickle=True, arr=self.out_file)
-            self.out_file = np.memmap(f'{self.save_path}out-{self.name}', dtype='float32', mode='w+', shape=(protein.shape[0] * self.num_looking, protein.shape[1]))
-            self.out_file[:protein.shape[0], :] = protein
-
-            # self.out_file = protein
-            # print(f'out shape: {self.out_file.shape}, pshape: {protein.shape}')
-
-        else:
-            # self.out_file = np.vstack([self.out_file, protein])
-            self.out_file[(self.track) * protein.shape[0]:(self.track + 1) * protein.shape[0], :] = protein
-
-            # print(f'out shape: {self.out_file.shape}, pshape: {protein.shape}')
-
+        :param sequence: String list of amino acid letters
+        :return: Int array of tokenized sequence
+        """
         # tokenize our sequence before saving!
         seq = ''
         p = 0
@@ -185,44 +179,56 @@ class protein_unifier():
         _, _, tokens = esm_batch_converter(batch)
         sequence = tokens[0, :].numpy()
 
+        return sequence
+
+
+    def add_protein(self, sequence, protein):
+
+        # Initialize our out_file if not already created
+        if self.out_file is None:
+            self.out_file = np.memmap(f'{self.save_path}out-{self.name}', dtype='float32', mode='w+', shape=(protein.shape[0] * self.num_looking, protein.shape[1]))
+            self.out_file[:protein.shape[0], :] = protein
+
+        else:
+            # Otherwise, add protein to our memmap.
+            self.out_file[(self.track) * protein.shape[0]:(self.track + 1) * protein.shape[0], :] = protein
+
+        # turn sequence into correct tokens before saving
+        sequence = self.tokenize(sequence)
+
+        # Initialize our in_file if not already created
         if self.in_file is None:
-            # self.in_file = sequence
-            # print(f'sequence shape: {sequence.shape}')
             self.in_file = np.memmap(f'{self.save_path}in-{self.name}', dtype='int', mode='w+',
                                       shape=(sequence.shape[0] * self.num_looking,))
             self.in_file[:sequence.shape[0]] = sequence
-            self.track += 1
         else:
-            # self.in_file = np.hstack([self.in_file, sequence])
+            # Add our sequence to its correct place in the array.
             self.in_file[(self.track) * sequence.shape[0]:(self.track + 1) * sequence.shape[0]] = sequence
-            self.track += 1
 
+        # update our iteration tracker
+        self.track += 1
 
-        # If our current step is not the same as our sequence...
-        # if (self.track * protein.shape[0]) != len(self.in_file):
-        #     print(f'input and output files are out of sync!')
-        #     print(f'in_file shape: {len(self.in_file)}')
-        #     print(f'out_file shape: {(self.track * protein.shape[0])}')
-        #     logging.warning(f'input and output files are out of sync')
-        #     logging.info(f'in_file shape: {len(self.in_file)}')
-        #     logging.info(f'out_file shape: {self.out_file.shape}')
+        # Double check our protein shape and sequence shape are in agreement!
+        if protein.shape[0] != sequence.shape[0]:
+            logging.error(f'Sequence & Protein Misaligned!! Location {self.track}')
+            logging.info(f'protein shape: {protein.shape}')
+            logging.info(f'sequence shape: {sequence.shape}')
+
 
     def save(self, name):
-        # Name should be XXX.bin
-        # print(f'in: {self.in_file}')
-        # print(f'out: {self.out_file[50, 85:90]}')
-        # for t, i in enumerate(self.out_file):
-        #     print(f'line {t}: {i[85:90]}')
-
-        # for t, i in enumerate(self.in_file):
-        #     print(f'line {t}: {i}')
+        """
+        Save the memmaps as their own npy objects!
+        :param name:
+        :return:
+        """
+        # No longer looking at a specific protein, remove protein code from logging
         change_log_code()
 
-
+        # save both our in file and out file
         np.save(f'{self.save_path}in-{name}', allow_pickle=True, arr=self.in_file)
         np.save(f'{self.save_path}out-{name}', allow_pickle=True, arr=self.out_file)
 
-        # just closes the output file!
+        # Close our memmap files!
         del self.out_file
         del self.in_file
 
@@ -1171,7 +1177,7 @@ if __name__ == "__main__":
 
     start = time.time()
     if reprocess.lower() == 't':
-        logger.warning(f'------------------------- Beginning Parsing Sequences ------------------------- ')
+        logger.info(f'------------------------- Beginning Parsing Sequences ------------------------- ')
         a = parse_seq.Sequence_Parser(max_samples=data_size)
         # a.parse_names(['6XTB'])
         print(a.e.encode)
@@ -1179,13 +1185,13 @@ if __name__ == "__main__":
         # a.open_struct('6XTB')
 
         # logging.info(f'Took {time.time() - start} seconds!!!')
-        logger.warning(f'Complete! Took {time.time() - start} seconds!!!')
+        logger.info(f'Complete! Took {time.time() - start} seconds!!!')
 
-        logger.warning('--------------------------------- Begin Processing Data ---------------------------------------- ')
+        logger.info('--------------------------------- Begin Processing Data ---------------------------------------- ')
 
         process_data(max_proteins=data_size)
 
-    logger.warning('--------------------------------- Begin Transformer ---------------------------------------- ')
+    logger.info('--------------------------------- Begin Transformer ---------------------------------------- ')
     output_len = 2430
 
     train_seq = np.load('PDBs/big_data/in-train.npy', mmap_mode='r', allow_pickle=True)

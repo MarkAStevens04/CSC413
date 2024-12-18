@@ -166,4 +166,5 @@ PDBs/full_formatted
 PDBs/big_data
 Logs/
 models/
+trial_tracker.txt
 
