@@ -11,8 +11,8 @@ from multiprocessing import Pool
 from multiprocessing_logging import install_mp_handler
 
 # setup_logger()
-logger = get_logger()
-logger.setLevel(logging.DEBUG)
+# logger = get_logger()
+# logger.setLevel(logging.DEBUG)
 
 
 class Sequence_Parser():
@@ -54,7 +54,8 @@ class Sequence_Parser():
         # NOTE: Length of self.aa_codes may NOT equal length of sequence info. Some proteins are culled.
         # Default to using our own codes, otherwise use codes provided.
         # logger = logging.getLogger("protein_logger")
-        # logger = get_logger()
+        logger = get_logger()
+        logger.info(f'inside')
         if aa_codes is None:
             sequence_info = get_pdbs.get_structs(self.aa_codes)
         else:
@@ -125,6 +126,7 @@ class Sequence_Parser():
         x, y, and z are the known to be true positions of each atom. Our known_position flag is a 0 if the position is unknown, and x = y = z = -1, and x, y, and z take on the correct values if the flag is 1 (meaning the position is known).
 
         """
+        logger = get_logger()
         # Begin by extracting the largest number of atoms in an amino acid (we find its 27)
         lengths = [len(self.e.aminos[a]) for a in self.e.aminos]
         max_size = max(lengths)
@@ -279,6 +281,7 @@ class Sequence_Parser():
         # logger = get_logger()
         # # logger = logging.getLogger("protein_logger")
         # logger.setLevel(logging.DEBUG)
+        logger = get_logger()
         print(f'remainder: {len(self.aa_codes) % batch_size}')
         print(f'adding: {(batch_size - (len(self.aa_codes) % batch_size)) % batch_size}')
         to_split = self.aa_codes + [''] * ((batch_size - (len(self.aa_codes) % batch_size)) % batch_size)
@@ -290,7 +293,7 @@ class Sequence_Parser():
             logger.info(f'beginning mp')
             enable_mp()
             logger.info(f'still beginning mp')
-            install_mp_handler(logger)
+            # install_mp_handler(logger)
             with Pool() as pool:
                 r = pool.imap_unordered(self.parse_names, to_split)
                 for ret in r:

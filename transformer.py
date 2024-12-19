@@ -16,6 +16,10 @@ from logging_setup import setup_logger, get_logger, change_log_code
 import time
 import parse_seq
 import sys
+import cProfile
+import pstats
+from pstats import SortKey
+import re
 # random.seed(777)
 
 logger = get_logger()
@@ -937,49 +941,51 @@ def process_sys_args(args):
     """
     if len(args) > 1:
         node_name = args[1]
-        reprocess = args[2]
+        pre_process = args[2]
+        post_process = args[3]
         try:
-            data_size = int(args[3])
+            data_size = int(args[4])
         except:
             data_size = 10
         try:
-            num_heads = int(args[4])
+            num_heads = int(args[5])
         except:
             num_heads = 8
 
         try:
-            depth = int(args[5])
+            depth = int(args[6])
         except:
             depth = 4
 
         try:
-            batch_size = int(args[6])
+            batch_size = int(args[7])
         except:
             batch_size = 10
 
         try:
-            num_epochs = int(args[7])
+            num_epochs = int(args[8])
         except:
             num_epochs = 10
 
     else:
         node_name = 'Default'
-        reprocess = 't'
+        pre_process = 't'
+        post_process = 't'
         data_size = 100
         num_heads = 8
         depth = 4
         batch_size = 2
         num_epochs = 100
 
-    return node_name, reprocess, data_size, num_heads, depth, batch_size, num_epochs
+    return node_name, pre_process, post_process, data_size, num_heads, depth, batch_size, num_epochs
 
 
 
 
 
 if __name__ == "__main__":
-    # System arguments: Node name, reprocess, data size, num_heads, depth, batch_size, num_epochs!
-    node_name, reprocess, data_size, num_heads, depth, batch_size, num_epochs = process_sys_args(sys.argv)
+    # System arguments: Node name, preprocess, postprocess, data size, num_heads, depth, batch_size, num_epochs!
+    node_name, pre_process, post_process, data_size, num_heads, depth, batch_size, num_epochs = process_sys_args(sys.argv)
 
     # Do our setup
     setup(node_name=node_name)
@@ -989,7 +995,7 @@ if __name__ == "__main__":
     logger.info(f'Started with following system variables:')
     logger.info(f'{sys.argv}')
     logger.info(f'node_name:  {node_name}')
-    logger.info(f'reprocess:  {reprocess}')
+    logger.info(f'pre_process:  {pre_process}')
     logger.info(f'num_heads:  {num_heads}')
     logger.info(f'depth:      {depth}')
     logger.info(f'batch_size: {batch_size}')
@@ -997,7 +1003,7 @@ if __name__ == "__main__":
 
 
     print(f'node_name: {node_name}')
-    print(f'reprocess: {reprocess}')
+    print(f'pre_process: {pre_process}')
     print(f'num_heads: {num_heads}')
     print(f'depth:     {depth}')
 
@@ -1013,14 +1019,26 @@ if __name__ == "__main__":
 
     # Parse sequences if we're asked to
     start = time.time()
-    if reprocess.lower() == 't':
+    if pre_process.lower() == 't':
         logger.info(f'------------------------- Beginning Parsing Sequences ------------------------- ')
         a = parse_seq.Sequence_Parser(max_samples=data_size)
         print(a.e.encode)
-        a.RAM_Efficient_parsing(batch_size=1, mp=True)
 
+
+        cProfile.run('a.RAM_Efficient_parsing(batch_size=10, mp=False)', 'restats')
+        # cProfile.run('main.single_pass(0.277, 380, 2, 600000, K=7, rvf=rvf_exp1a)', 'restats')
+        p = pstats.Stats('restats')
+        p.strip_dirs().sort_stats(SortKey.CUMULATIVE).print_stats()
+        #
+        #
+        p.print_callers()
+        p.strip_dirs()
+        print(f'profiled!')
+        # a.RAM_Efficient_parsing(batch_size=1, mp=True)
+        pause
 
         logger.info(f'Complete! Took {time.time() - start} seconds!!!')
+    if post_process.lower() == 't':
         # Process data if we're asked to
         logger.info('--------------------------------- Begin Processing Data ---------------------------------------- ')
 

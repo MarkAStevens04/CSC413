@@ -9,8 +9,8 @@ import os
 #           your python scripts might not have a fully set up logger yet!
 
 change_code = False
-logger = logging.getLogger("protein_logger")
-logger.setLevel(logging.DEBUG)
+# logger = logging.getLogger("protein_logger")
+# logger.setLevel(logging.DEBUG)
 
 
 class ProteinLogFilter(logging.Filter):
@@ -50,6 +50,8 @@ def setup_logger(node_name='DEFAULT'):
     # Setup directory for logs to live
     os.makedirs(f'Logs', exist_ok=True)
     os.makedirs(f'Logs/{node_name}', exist_ok=True)
+
+    # Create and return the logger
     logger = logging.getLogger("protein_logger")
 
     # ---------------------- Logging framework ----------------------
@@ -78,38 +80,19 @@ def setup_logger(node_name='DEFAULT'):
     logging.basicConfig(level=logging.DEBUG, handlers=(file_handler,master_handler),
                         format='%(levelname)-8s: %(asctime)-22s %(module)-15s %(protein_code)-4s - %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S | ')
-    # Create and return the logger
-    print(f'handlers: {logger.handlers}')
-    print(f'filters {logger.filters}')
-    print(f'logger: {logger}')
+
 
     # Add the ProteinFilter if it's not already present
     if not any(isinstance(f, ProteinLogFilter) for f in logger.filters):
         protein_filter = ProteinLogFilter()
         logger.addFilter(protein_filter)
     install_mp_handler(logger)
-    print(f'filters: {logger.filters}')
-    print(f'logger: {logger}')
-    print(f'handlers: {logger.handlers}')
-    print(f'SETTING UP!!!!')
-    logger.warning(f'first log')
     return logger
 
 
 def get_logger():
     """Retrieve the logger for modules."""
     logger = logging.getLogger("protein_logger")
-    # if not any(isinstance(f, ProteinLogFilter) for f in logger.filters):
-    #     protein_filter = ProteinLogFilter()
-    #     logger.addFilter(protein_filter)
-    #     print(f'adding new filter???')
-    # print(f'filters: {logger.filters}')
-    # print(f'getting logger')
-    # print(f'logger: {logger}')
-    # print(f'handlers: {logger.handlers}')
-    # print(f'parent: {logger.parent}')
-    # print(f'caller: {logger.findCaller(stack_info=True)}')
-    # print()
     return logger
 
 
@@ -120,7 +103,6 @@ def enable_mp():
     """
     global change_code
     change_code = False
-    print(f'turning off change code...')
 
 def disable_mp():
     """
@@ -137,11 +119,6 @@ def change_log_code(code='    '):
     :param code:
     :return:
     """
-    # global change_code
-    # global started
-    # print(f'wants to change log code...')
-    # print(f'change code: {change_code}')
-    # print(f'started? {started}')
     if change_code:
         get_protein_filter(get_logger()).change_protein_code(code)
-    # get_protein_filter(get_logger()).change_protein_code(code)
+
