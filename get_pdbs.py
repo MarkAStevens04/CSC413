@@ -17,8 +17,9 @@ import logging.handlers
 from Bio.SeqUtils import seq1
 import re
 from Bio.PDB.mmcifio import MMCIFIO
-from logging_setup import get_logger, change_log_code
+from logging_setup import setup_logger, get_logger, change_log_code
 
+# setup_logger()
 logger = get_logger()
 logger.setLevel(logging.DEBUG)
 
@@ -306,6 +307,10 @@ def get_structs(names):
     :param names: List of 4-letter protein codes. Should be stores in mmCIF_DIR/CODE.cif
     :return: (4-Letter Code, Reference Sequence, Known Position Sequence, List of aminos with atom positions)
     """
+    # logger = get_logger()
+    # # logger = logging.getLogger("protein_logger")
+    # logger.setLevel(logging.DEBUG)
+
     names = [mmCIF_DIR + "/" + name.lower() + ".cif" for name in names if name != '']
     files = [open(name) for name in names]
 

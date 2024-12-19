@@ -4,9 +4,13 @@ import logging.handlers
 import amino_expert
 import numpy as np
 import time
-from logging_setup import get_logger, change_log_code
+from logging_setup import setup_logger, get_logger, change_log_code, enable_mp, disable_mp
+import multiprocessing
+from multiprocessing import Process
+from multiprocessing import Pool
+from multiprocessing_logging import install_mp_handler
 
-
+# setup_logger()
 logger = get_logger()
 logger.setLevel(logging.DEBUG)
 
@@ -49,6 +53,8 @@ class Sequence_Parser():
         # Sequence info is [protein 1, protein 2, ...] where protein 1 = (4-letter protein code, reference protein sequence, defined_position protein sequence, list of atoms)
         # NOTE: Length of self.aa_codes may NOT equal length of sequence info. Some proteins are culled.
         # Default to using our own codes, otherwise use codes provided.
+        # logger = logging.getLogger("protein_logger")
+        # logger = get_logger()
         if aa_codes is None:
             sequence_info = get_pdbs.get_structs(self.aa_codes)
         else:
@@ -74,7 +80,7 @@ class Sequence_Parser():
 
             # Check for our error signal
             if given is None:
-                logging.error(f'Throwing away protein {code}')
+                logger.error(f'Throwing away protein {code}')
             else:
                 new_ref = ref_seq.replace('-', '')
                 # Verify that our sequence length is what we expect
@@ -263,25 +269,55 @@ class Sequence_Parser():
 
 
 
-    def RAM_Efficient_parsing(self, batch_size=1000):
+    def RAM_Efficient_parsing(self, batch_size=1000, mp=True):
         """
         Parses params in batches. Slightly slower but much more RAM efficient.
         Use if running into memory problems.
         :param batch_size:
         :return:
         """
+        # logger = get_logger()
+        # # logger = logging.getLogger("protein_logger")
+        # logger.setLevel(logging.DEBUG)
         print(f'remainder: {len(self.aa_codes) % batch_size}')
         print(f'adding: {(batch_size - (len(self.aa_codes) % batch_size)) % batch_size}')
         to_split = self.aa_codes + [''] * ((batch_size - (len(self.aa_codes) % batch_size)) % batch_size)
         to_split = np.array(to_split)
         to_split = np.reshape(to_split, (-1, batch_size))
         print(f'to split: {to_split}')
-        for t, names in enumerate(to_split):
-            logger.info(f'------------------------ started parsing {names} ------------------------')
-            percent = (t / to_split.shape[0]) * 100
-            print(f'parsing: {names} {(round(percent, 1))}% there!!')
-            self.parse_names(names)
+        s = time.time()
+        if mp:
+            logger.info(f'beginning mp')
+            enable_mp()
+            logger.info(f'still beginning mp')
+            install_mp_handler(logger)
+            with Pool() as pool:
+                r = pool.imap_unordered(self.parse_names, to_split)
+                for ret in r:
+                    print(f'completed!')
+                print(f'mapping...')
+            disable_mp()
+            print(f'finished!')
+            print(f'active children:')
+            print(f'{multiprocessing.active_children()}')
 
+
+        else:
+            logger.info(f'no multithread speed-up :(')
+            for t, names in enumerate(to_split):
+                logger.info(f'------------------------ started parsing {names} ------------------------')
+                percent = (t / to_split.shape[0]) * 100
+                print(f'parsing: {names} {(round(percent, 1))}% there!!')
+                self.parse_names(names)
+
+
+
+        print(f'')
+        print(f'took {time.time() - s} seconds!!')
+        # For 100 proteins...
+        # No multiprocessing: 62sec
+        # With multiprocessing batch size 10: 34sec
+        # With multiprocessing batch size 1: 18sec
 
 
 
@@ -352,4 +388,4 @@ if __name__ == '__main__':
     get_pdbs.adjust_position('6XTB', t, a.e)
 
     # logging.info(f'Took {time.time() - start} seconds!!!')
-    logging.warning(f'Complete! Took {time.time() - start} seconds!!!')
+    logger.warning(f'Complete! Took {time.time() - start} seconds!!!')

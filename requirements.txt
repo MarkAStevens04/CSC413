@@ -6,3 +6,4 @@ glob2
 requests
 esm
 fair-esm
+multiprocessing-logging

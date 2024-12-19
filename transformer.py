@@ -12,11 +12,15 @@ import random
 from torch.utils.data import DataLoader
 import torch
 import logging
-from logging_setup import get_logger, setup_logger, change_log_code
+from logging_setup import setup_logger, get_logger, change_log_code
 import time
 import parse_seq
 import sys
 # random.seed(777)
+
+logger = get_logger()
+logger.setLevel(logging.DEBUG)
+
 
 
 esm_model, esm_alphabet = esm.pretrained.esm2_t6_8M_UR50D()
@@ -225,9 +229,9 @@ class protein_unifier():
 
         # Double check our protein shape and sequence shape are in agreement!
         if protein.shape[0] != sequence.shape[0]:
-            logging.error(f'Sequence & Protein Misaligned!! Location {self.track}')
-            logging.info(f'protein shape: {protein.shape}')
-            logging.info(f'sequence shape: {sequence.shape}')
+            logger.error(f'Sequence & Protein Misaligned!! Location {self.track}')
+            logger.info(f'protein shape: {protein.shape}')
+            logger.info(f'sequence shape: {sequence.shape}')
 
 
     def save(self, name):
@@ -263,7 +267,7 @@ def stack_atoms(target):
     """
     # Target.shape[0] must be multiple of 27.
     if target.shape[0] % 27 != 0:
-        logging.warning(f'Invalid protein shape for stacking. {target.shape}')
+        logger.warning(f'Invalid protein shape for stacking. {target.shape}')
 
     # stack groups of 27 atoms into a single row!
     N, M = target.shape
@@ -961,7 +965,7 @@ def process_sys_args(args):
     else:
         node_name = 'Default'
         reprocess = 't'
-        data_size = 4
+        data_size = 100
         num_heads = 8
         depth = 4
         batch_size = 2
@@ -1013,7 +1017,7 @@ if __name__ == "__main__":
         logger.info(f'------------------------- Beginning Parsing Sequences ------------------------- ')
         a = parse_seq.Sequence_Parser(max_samples=data_size)
         print(a.e.encode)
-        a.RAM_Efficient_parsing(batch_size=10)
+        a.RAM_Efficient_parsing(batch_size=1, mp=True)
 
 
         logger.info(f'Complete! Took {time.time() - start} seconds!!!')
